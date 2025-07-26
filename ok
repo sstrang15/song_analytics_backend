@@ -1,0 +1,42 @@
+ok 
+
+so 
+
+1. get a function that opens tidalapi
+2. creates a session saves session
+3. give it a sessionid  and it opens that session
+---check
+
+goal
+
+1. to get my music listening history (favorites) with metadata from tidal
+---check
+
+2. to see that history on a webpage
+
+	- make a script that handles incoming data
+		what does handling mean i dont know really
+		somehow i want a group of information to come that is headers basically
+		and that will go in a special block of data in the table
+
+		the other data is just rows of data
+		each row comes in and i generate a row in the html and put the data in it
+
+
+	finish up script that packages up data 
+	read how to take that data and share it with the website handler
+
+3. to be able to scroll through it in a self contained window
+
+
+part 2
+
+1. is modified to every track from every album in every playlist
+---check
+
+part 3
+1. favorites
+2. track names
+3. album names
+4. artist names
+part
