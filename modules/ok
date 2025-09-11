@@ -3,7 +3,7 @@ ok
 so 
 
 1. get a function that opens tidalapi
-2. creates a session saves session
+2. creates a session saves session 
 3. give it a sessionid  and it opens that session
 ---check
 
