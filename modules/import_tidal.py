@@ -11,7 +11,10 @@ import pandas as pd
 from pathlib import Path
 import pathlib
 
-# Step 1: Create session and login with credentials
+# ---------------- Session Management ----------------
+SESSION_FILE = Path("tidal_session_oauth.json")
+_session = None  # cached session
+
 
 def get_playlists(session):
     # Make sure you have a loaded session (from step 2 or 3)
@@ -25,7 +28,7 @@ def get_playlists(session):
     # tidal_data = []
     for playlist in my_playlists:
         tracks = playlist.items()
-        for track in tracks: 
+        # for track in tracks: 
     #         # print(f"{playlist.name} - {track.name} - {track.album.name} - {track.artist.name} - {track.popularity}")
     #         tidal_data.append({
     #             'Track Name': track.name,
@@ -52,20 +55,79 @@ def get_playlists(session):
 #         'Popularity': track.popularity
 #     })
 
+# ---------------- Track Endpoint -------------------
+async def get_tracks(artists, albums=None):
+    """
+    Return tracks for the given artist.
+    If album is provided, filter tracks for that album.
+    """
+    session = get_session()
+    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+    artist = results["artists"][0]
+    tracks = artist.get_top_tracks()
+    return [track.name for track in tracks][:15]
+    # tracks = session.user.favorites.tracks()  # get all favorite tracks
+    # artist_tracks = []
+    # album_tracks = []
+    # print("function called")
+    # for track in tracks:
+    #     for artist in artists:
+    #         if track.artist.name == artist:
+    #             artist_tracks.append(track.name)
+        # for album in albums:
+        #     if track.album.name == artist:
+        #         album_tracks.append(track.name)            
+            # album_tracks.add(track.artist.name, track.album.name) 
 
-def main():
+
+    # album_artist_intersection = artist_tracks & album_tracks
+    # return artist_tracks
+
+async def get_albums(artists, albums=None):
+    """
+    Return tracks for the given artist.
+    If album is provided, filter tracks for that album.
+    """
+    session = get_session()
+    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+    artist = results["artists"][0]
+    albums = artist._get_albums()
+    return [album.name for album in albums]
+    # tracks = session.user.favorites.tracks()  # get all favorite tracks
+    # artist_tracks = []
+    # album_tracks = []
+    # print("function called")
+    # for track in tracks:
+    #     for artist in artists:
+    #         if track.artist.name == artist:
+    #             artist_tracks.append(track.name)
+        # for album in albums:
+        #     if track.album.name == artist:
+        #         album_tracks.append(track.name)            
+            # album_tracks.add(track.artist.name, track.album.name) 
+
+
+    # album_artist_intersection = artist_tracks & album_tracks
+    return artist_tracks
+
+def get_session():
+
+    """
+    Return a logged-in Tidal session, creating it if needed.
+    Cached globally for reuse across requests.
+    """
     session = tidalapi.Session()
-    session_file = Path("tidal_session_oauth.json") # Where to store session file
     login_flag = False
+
     while not login_flag:
-        # the code that makes sure you can log into an existing session when session file is created
         try:
-            # tries to open an existing session
-            session.login_session_file(session_file)
+            # Try loading existing session
+            session.login_session_file(SESSION_FILE)
             login_flag = True
         except Exception as e:
             print("Session file failed", e)
             try:
+                # Fall back to OAuth simple login
                 session.login_oauth_simple()
                 data = {
                     "token_type": {"data": session.token_type},
@@ -73,22 +135,16 @@ def main():
                     "access_token": {"data": session.access_token},
                     "refresh_token": {"data": session.refresh_token},
                     "is_pkce": {"data": session.is_pkce},
-                    "user": session.user
+                    "user": str(session.user)
                 }
-                with session_file.open("w") as outfile:
-                    json.dump(data, outfile)
-                login_flag = True
+                with SESSION_FILE.open("w") as f:
+                    json.dump(data, f)
+
+                session_id = data["session_id"]["data"]
+                print(f"Session opened: {session_id}")
+                login_flag = True  # session created successfully
             except Exception as e:
-                print("Oauth login failed", e)
-    # shows session information
-    with open(session_file, 'r') as f:
-        file = json.load(f)
-        session_id = file["session_id"]["data"]
-        print(f"Session opened: {session_id}")
+                raise RuntimeError("Tidal OAuth login failed") from e
 
-    # data = get_favorites(session)
-    data = get_playlists(session)
-    return data
-
-if __name__ == "__main__":
-    main()
+    _session = session
+    return _session

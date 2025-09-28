@@ -1,0 +1,40 @@
+1. Connection / Request Layer (scope)
+
+This is static metadata about the incoming request.
+Think of it as: “Who is calling, what method, which URL, and what headers?”
+It doesn’t include the body yet; it’s just context.
+Conceptually, it’s the entry point of the request into your server.
+
+2. Input / Event Layer (receive)
+
+This is streamed input from the client.
+For simple GET requests, this layer may be almost empty.
+For POSTs, uploads, or streaming data, this is where the request body is delivered in chunks.
+Conceptually, it’s the pipeline for incoming data, separate from the request metadata.
+
+3. Routing / Dispatch Layer (routes)
+
+Decides which part of your application should handle this request.
+Often implemented as a table, map, or router.
+The main idea: “Given this path and method, pick a handler function.”
+This keeps decision-making separate from actual processing logic.
+
+4. Handler / Business Logic Layer (handler)
+
+This is the core of your application.
+Each route has a handler that does the real work
+Calls imported functions
+Queries databases
+Computes or transforms data
+The handler doesn’t worry about ASGI plumbing — it just returns data and a status.
+Conceptually, this is the brain of your server.
+
+5. Response / Output Layer (send)
+
+This is the ASGI mechanism to return data to the client.
+Handles:
+Status codes
+Headers
+Body (can be streamed or complete)
+A generic response layer allows all handlers to return data consistently.
+Conceptually, it’s the final packaging and delivery step, translating your app’s data into HTTP responses.
