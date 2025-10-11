@@ -56,7 +56,7 @@ def get_playlists(session):
 #     })
 
 # ---------------- Track Endpoint -------------------
-async def get_tracks(artists, albums=None):
+async def get_top_tracks(artists, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
@@ -66,24 +66,27 @@ async def get_tracks(artists, albums=None):
     artist = results["artists"][0]
     tracks = artist.get_top_tracks()
     return [track.name for track in tracks][:15]
-    # tracks = session.user.favorites.tracks()  # get all favorite tracks
-    # artist_tracks = []
-    # album_tracks = []
-    # print("function called")
-    # for track in tracks:
-    #     for artist in artists:
-    #         if track.artist.name == artist:
-    #             artist_tracks.append(track.name)
-        # for album in albums:
-        #     if track.album.name == artist:
-        #         album_tracks.append(track.name)            
-            # album_tracks.add(track.artist.name, track.album.name) 
 
+async def get_favorites(artists, albums=None):
+    """
+    Return tracks for the given artist.
+    If album is provided, filter tracks for that album.
+    """
+    session = get_session()         
+    tracks = session.user.favorites.tracks()  # get all favorite tracks
+    artist_tracks = []
+    album_tracks = []
+    print("function called")
+    for track in tracks:
+        for artist in artists:
+            if track.artist.name == artist:
+                artist_tracks.append(track.name)
+        for album in albums:
+            if track.album.name == artist:
+                album_tracks.append(track.name)            
+            album_tracks.add(track.artist.name, track.album.name) 
 
-    # album_artist_intersection = artist_tracks & album_tracks
-    # return artist_tracks
-
-async def get_albums(artists, albums=None):
+async def get_tracks(artists, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
@@ -91,24 +94,45 @@ async def get_albums(artists, albums=None):
     session = get_session()
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
     artist = results["artists"][0]
-    albums = artist._get_albums()
-    return [album.name for album in albums]
-    # tracks = session.user.favorites.tracks()  # get all favorite tracks
-    # artist_tracks = []
-    # album_tracks = []
-    # print("function called")
-    # for track in tracks:
-    #     for artist in artists:
-    #         if track.artist.name == artist:
-    #             artist_tracks.append(track.name)
-        # for album in albums:
-        #     if track.album.name == artist:
-        #         album_tracks.append(track.name)            
-            # album_tracks.add(track.artist.name, track.album.name) 
+    album_catalog = artist._get_albums()
+    print(f"Album is {albums}")
+    album_list = []
+    for alb in albums:
+        for album in album_catalog:
+            if album.name == alb:
+                tracks = album.tracks()
+                for track in tracks:
+                    track_info = {
+                        "name": track.name,
+                        "popularity": track.popularity
+                    }
+                    track_list.append(track_info)
 
+    return track_list
 
-    # album_artist_intersection = artist_tracks & album_tracks
-    return artist_tracks
+async def get_albums(artists):
+    """
+    Return albums for the given artist with associated popularity
+    """
+    session = get_session()
+    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+    artist = results["artists"][0]
+    album_catalog = artist._get_albums()
+    album_list = []
+    for album in album_catalog:
+        tracks = album.tracks()
+        popularity = 0
+        print(popularity)
+        for track in tracks:
+            print(track.name)
+            popularity += track.popularity
+        album_info = {
+            "name": album.name,
+            "popularity": popularity/len(tracks)
+        }
+        album_list.append(album_info)
+
+    return album_list
 
 def get_session():
 
