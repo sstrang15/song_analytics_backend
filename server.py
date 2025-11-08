@@ -3,9 +3,7 @@
 # ==============================================
 import json
 from urllib.parse import parse_qs
-from modules.import_tidal import get_tracks, get_albums
-
-
+from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_favorites
 
 # ==============================================
 #  CORE ASGI APP  (DO NOT CHANGE)
@@ -40,6 +38,7 @@ async def app(scope, receive, send):
             status = 200
 
         # Send final response
+        print(data)
         await send_response(send, status, data)
 
     except Exception as e:
@@ -60,6 +59,16 @@ async def app(scope, receive, send):
 #   - handler (callable or None): The function to handle the route
 #   - params (dict): Flattened dictionary of parameters to pass to the handler
 
+
+# Scope → tells you everything about the request.
+
+# Receive → lets you read the client’s messages.
+
+# Send → lets you send responses (headers + body) back.
+
+# ASGI is async-first, supports multiple protocols.
+
+# Frameworks like FastAPI make it easy to work with, but the underlying mechanism is exactly what you’ve coded in your echo example.
 
 
 # ==============================================
@@ -84,9 +93,12 @@ async def match_route(path, query_string: bytes):
     # Look up handler
     route_key = segments[0] if segments else None
     handler = routes.get(route_key)
+    print(query_params)
 
     if not handler:
-        return None, segment_dict, lambda _: {"error": f"No route for {route_key}"}
+        async def fallback(params):
+            return {"error": f"No route for {route_key}"}
+        handler = fallback
 
     return segment_dict, dict(query_params), handler
 
@@ -101,10 +113,15 @@ async def track_handler(params):
     """
     artist = params.get("artist")
     album = params.get("album")  # may be None
-    print(f"Handler called")
     # return {"handler": "artist_handler", "artist": params.get("artist")}
-    # print(f"artist: {artist}, album: {album}")
-    tracks = await get_top_tracks(artist)
+    print(f"artist: {artist}, album: {album}")
+    try:
+        tracks = await get_top_tracks(artist, album)
+    except Exception as e:
+        print("Error in get_tracks:", e)
+        tracks = []
+    # tracks = await get_tracks(artist,album)
+    print(f"tracks are {tracks}")
     return tracks
 
 async def album_handler(params):
@@ -112,10 +129,9 @@ async def album_handler(params):
     Example handler for /getalbums?artist={artist}
     """
     artist = params.get("artist")
-    album = params.get("album")  # may be None
-    # return {"handler": , "artist": params.get("artist")}
-    tracks = await get_albums(artist)
-    return tracks
+    print(artist)
+    albums = await get_albums(artist)
+    return {"albums": albums}
 
 
 # ==============================================

@@ -7,6 +7,7 @@ import tidalapi
 import json
 import os
 import requests
+import asyncio
 import pandas as pd
 from pathlib import Path
 import pathlib
@@ -14,7 +15,6 @@ import pathlib
 # ---------------- Session Management ----------------
 SESSION_FILE = Path("tidal_session_oauth.json")
 _session = None  # cached session
-
 
 def get_playlists(session):
     # Make sure you have a loaded session (from step 2 or 3)
@@ -61,13 +61,14 @@ async def get_top_tracks(artists, albums=None):
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
     """
+    # return "ARE WE HERE"
     session = get_session()
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
     artist = results["artists"][0]
-    tracks = artist.get_top_tracks()
-    return [track.name for track in tracks][:15]
+    tracks = artist.get_top_tracks(limit = 20)
+    return [track.name for track in tracks][:]
 
-async def get_favorites(artists, albums=None):
+async def get_favorites(artists, albums=[]):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
@@ -84,29 +85,35 @@ async def get_favorites(artists, albums=None):
         for album in albums:
             if track.album.name == artist:
                 album_tracks.append(track.name)            
-            album_tracks.add(track.artist.name, track.album.name) 
+            album_tracks.append(track.artist.name, track.album.name) 
+    return album_tracks
 
 async def get_tracks(artists, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
     """
+    if albums is None:
+        albums = []
     session = get_session()
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+    if not results["artists"]:
+        return []
     artist = results["artists"][0]
+    print(f"artist is {artist.name}")
     album_catalog = artist._get_albums()
-    print(f"Album is {albums}")
     album_list = []
-    for alb in albums:
-        for album in album_catalog:
-            if album.name == alb:
-                tracks = album.tracks()
-                for track in tracks:
-                    track_info = {
-                        "name": track.name,
-                        "popularity": track.popularity
-                    }
-                    track_list.append(track_info)
+    track_list = []
+    for album in album_catalog:
+        if not albums or album.name in albums:
+            tracks = album.tracks()
+            for track in tracks:
+                track_info = {
+                    "name": track.name,
+                    "popularity": track.popularity,
+                    "album": album.name
+                }
+                track_list.append(track_info)
 
     return track_list
 
@@ -122,14 +129,16 @@ async def get_albums(artists):
     for album in album_catalog:
         tracks = album.tracks()
         popularity = 0
-        print(popularity)
         for track in tracks:
-            print(track.name)
             popularity += track.popularity
         album_info = {
             "name": album.name,
-            "popularity": popularity/len(tracks)
-        }
+            "universal_product_number": album.universal_product_number,     
+            "audiomodes": album.audio_modes,
+            "media": album.media_metadata_tags,
+            "popularity": popularity/len(tracks),
+            "version":album.version,
+            }
         album_list.append(album_info)
 
     return album_list
@@ -172,3 +181,6 @@ def get_session():
 
     _session = session
     return _session
+
+tracks = get_albums("Radiohead")
+print(tracks)
