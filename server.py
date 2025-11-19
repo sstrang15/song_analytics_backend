@@ -94,7 +94,7 @@ async def match_route(path, query_string: bytes):
     # Look up handler
     route_key = segments[0] if segments else None
     handler = routes.get(route_key)
-    # print(query_params)
+    print(query_params)
 
     if not handler:
         async def fallback(params):
@@ -115,13 +115,12 @@ async def track_handler(params):
     artist = params.get("artist")
     album = params.get("album")  # may be None
     # return {"handler": "artist_handler", "artist": params.get("artist")}
-    # print(f"artist: {artist}, album: {album}")
+    print(f"artist: {artist}, album: {album}")
     try:
-        tracks = await get_top_tracks(artist, album)
+        tracks = await get_tracks(artist, album)
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
-    tracks = await get_tracks(artist,album)
     # print(f"tracks are {tracks}")
     return tracks
 
@@ -149,8 +148,11 @@ async def send_response(send, status, data):
     ]
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
-    print("Data sent ...")
-    print(body)
+    print("Data sent ...\n")
+    # print(type(body))
+    # print()
+    print(f"The text is ... {body}")
+
 
 
 
