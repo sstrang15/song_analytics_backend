@@ -117,7 +117,7 @@ async def track_handler(params):
     # return {"handler": "artist_handler", "artist": params.get("artist")}
     print(f"artist: {artist}, album: {album}")
     try:
-        tracks = await get_tracks(artist, album)
+        tracks = await get_favorites(artist, album)
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []

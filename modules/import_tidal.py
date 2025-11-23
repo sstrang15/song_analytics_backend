@@ -87,27 +87,72 @@ async def get_top_tracks(artists, albums=None):
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
     artist = results["artists"][0]
     tracks = artist.get_top_tracks(limit = 20)
+    # Make a filter for album if provided
     return [track_to_dict(track) for track in tracks]
 
-async def get_favorites(artists, albums=[]):
+async def get_favorites(artists=None, albums=None):
     """
-    Return tracks for the given artist.
+    Return favorited tracks that match filter
     If album is provided, filter tracks for that album.
     """
     session = get_session()         
     tracks = session.user.favorites.tracks()  # get all favorite tracks
-    artist_tracks = []
-    album_tracks = []
-    print("function called")
+
+    filtered_tracks = []  
+
+    artist_set = set()
+    album_set = set()
+
     for track in tracks:
-        for artist in artists:
-            if track.artist.name == artist:
-                artist_tracks.append(track.name)
-        for album in albums:
-            if track.album.name == artist:
-                album_tracks.append(track.name)            
-            album_tracks.append(track.artist.name, track.album.name) 
-    return album_tracks
+        # Collect all artists and albums    
+        artist_set.add(track.artist.name)
+        album_set.add(track.album.name)        
+
+        track_album = track.album.name
+        track_artist = track.artist.name
+        
+        # No filters → append everything
+        if not artists and not albums:
+            filtered_tracks.append({
+                "Track": track.name,
+                "Album": track_album,
+                "Artist": track_artist
+            })
+            continue  # skip to next track
+
+        # Determine match inside the loop
+        match = False
+
+        # Albums have highest priority
+        if albums:
+            for a in albums:
+                if a.lower() in track_album.lower():
+                    match = True
+                    break
+        # If no album filter, check artist
+        elif artists:
+            for a in artists:
+                if a.lower() == track_artist.lower():
+                    match = True
+                    break
+
+        if match:
+            filtered_tracks.append({
+                "Track": track.name,
+                "Album": track_album,
+                "Artist": track_artist,
+            })
+
+    # Convert sets to list of dicts at the end
+    artist_favorites = []
+    for a in sorted(artist_set):
+        artist_favorites.append({"Artist": a})
+
+    album_favorites = []
+    for a in sorted(album_set):
+        album_favorites.append({"Album": a})
+
+    return [filtered_tracks, artist_favorites, album_favorites]
 
 async def get_tracks(artists, albums=None):
     """
@@ -122,18 +167,18 @@ async def get_tracks(artists, albums=None):
     track_list = []
     # ---------------- Entry check ----------------
     # If neither artist nor album list is provided, there's nothing to fetch
-    # if artists:
-    #     results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
-    #     if results["artists"]:
-    #         artist = results["artists"][0]
-    #         album_catalog = artist._get_albums()
-    #         print("Artist was located")
-    #     else:
-    #         print(f"Artist was not located")
-    #         album_catalog = []
-    # else:
-    #     # Can't match albums without an artist
-    #     return []
+    if artists:
+        results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
+        if results["artists"]:
+            artist = results["artists"][0]
+            album_catalog = artist._get_albums()
+            print("Artist was located")
+        else:
+            print(f"Artist was not located")
+            album_catalog = []
+    else:
+        # Can't match albums without an artist
+        return []
     
     # Make album filter case-insensitive
     # albums_lower = [a.name.lower() for a in album_catalog]
@@ -235,3 +280,4 @@ def get_session():
 # top_tracks = get_top_tracks("Radiohead")
 # tracks = get_tracks("Radiohead","OK Computer")
 # print(tracks)
+favs = get_favorites(artists=["Radiohead","The Strokes"])
