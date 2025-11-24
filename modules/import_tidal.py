@@ -19,41 +19,27 @@ _session = None  # cached session
 async def get_playlists(session):
     # Make sure you have a loaded session (from step 2 or 3)
     # get all favorites tracks, albums and artists
-    my_tracks = session.user.favorites.tracks()
-    my_albums = session.user.favorites.albums()
-    my_artists = session.user.favorites.artists()
 
     # users playlists
     my_playlists = session.user.playlists()
     # tidal_data = []
     for playlist in my_playlists:
         tracks = playlist.items()
-        # for track in tracks: 
-    #         # print(f"{playlist.name} - {track.name} - {track.album.name} - {track.artist.name} - {track.popularity}")
-    #         tidal_data.append({
-    #             'Track Name': track.name,
-    #             'Artist Name': track.artist.name,
-    #             'Album Name': track.album.name,
-    #             'Duration': track.duration,
-    #             'Popularity': track.popularity,
-    #             'Playlist': playlist.name
-    #         })
+        for track in tracks: 
+            # print(f"{playlist.name} - {track.name} - {track.album.name} - {track.artist.name} - {track.popularity}")
+            playlist_tracks.append({
+                'Track Name': track.name,
+                'Artist Name': track.artist.name,
+                'Album Name': track.album.name,
+                'Duration': track.duration,
+                'Popularity': track.popularity,
+                'Playlist': playlist.name
+            })
 
     # tidal_df = pd.DataFrame(tidal_data)
     # tidal_favorites = tidal_df.to_csv('~/Desktop/music_project/web_application/tidal_favorites.csv', index=False)
-
+    return playlist_tracks
 # tracks = session.user.favorites.tracks()
-
-# tidal_data = []
-# for track in tracks:
-#     tidal_data.append({
-#         'Id': track.id,
-#         'Track Name': track.name,
-#         'Artist Name': track.artist.name,
-#         'Album Name': track.album.name,
-#         'Duration': track.duration,
-#         'Popularity': track.popularity
-#     })
 
 def track_to_dict(track):
     # name is mandatory
@@ -132,7 +118,7 @@ async def get_favorites(artists=None, albums=None):
         # If no album filter, check artist
         elif artists:
             for a in artists:
-                if a.lower() == track_artist.lower():
+                if track_artist == a:
                     match = True
                     break
 
@@ -152,7 +138,7 @@ async def get_favorites(artists=None, albums=None):
     for a in sorted(album_set):
         album_favorites.append({"Album": a})
 
-    return [filtered_tracks, artist_favorites, album_favorites]
+    return [filtered_tracks]# , artist_favorites, album_favorites]
 
 async def get_tracks(artists, albums=None):
     """

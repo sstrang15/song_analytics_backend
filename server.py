@@ -33,6 +33,7 @@ async def app(scope, receive, send):
 
         # --- Route handling (EDITABLE VIA match_route / routes) ---
         else:
+
             segments, params, handler = await match_route(path, query_bytes)
             data = await handler(params)
             status = 200
