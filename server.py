@@ -122,8 +122,8 @@ async def track_handler(params):
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
-    # print(f"tracks are {tracks}")
-    return tracks
+    print(f"tracks are {tracks}")
+    return tracks[0]
 
 async def album_handler(params):
     """

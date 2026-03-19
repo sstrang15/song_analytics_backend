@@ -1,0 +1,22 @@
+# --------------------------
+# Python virtual environment
+# --------------------------
+venv/
+
+# --------------------------
+# Python cache / compiled files
+# --------------------------
+__pycache__/
+*.py[cod]
+
+# --------------------------
+# Local / sensitive files
+# --------------------------
+*.json       # tidal session files
+.env         # environment variables
+
+# --------------------------
+# OS files
+# --------------------------
+.DS_Store
+Thumbs.db

@@ -72,7 +72,7 @@ async def get_top_tracks(artists, albums=None):
     session = get_session()
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
     artist = results["artists"][0]
-    tracks = artist.get_top_tracks(limit = 20)
+    tracks = artist.get_top_tracks(limit = 60)
     # Make a filter for album if provided
     return [track_to_dict(track) for track in tracks]
 
@@ -82,7 +82,7 @@ async def get_favorites(artists=None, albums=None):
     If album is provided, filter tracks for that album.
     """
     session = get_session()         
-    tracks = session.user.favorites.tracks()  # get all favorite tracks
+    tracks = session.user.favorites.tracks(limit=600)  # get all favorite tracks
 
     filtered_tracks = []  
 
@@ -98,12 +98,18 @@ async def get_favorites(artists=None, albums=None):
         track_artist = track.artist.name
         
         # No filters → append everything
-        if not artists and not albums:
-            filtered_tracks.append({
+        if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
+            # filtered_tracks.append( track.__dict__)
+            # flattened_track = flatten_track(track)
+            # filtered_tracks.append(flattened_track)
+            filtered_tracks.append(
+                {
                 "Track": track.name,
                 "Album": track_album,
-                "Artist": track_artist
-            })
+                "Artist": track_artist,
+                }
+            )
+
             continue  # skip to next track
 
         # Determine match inside the loop
@@ -123,12 +129,14 @@ async def get_favorites(artists=None, albums=None):
                     break
 
         if match:
-            filtered_tracks.append({
+            filtered_tracks.append(
+                {
                 "Track": track.name,
                 "Album": track_album,
                 "Artist": track_artist,
-            })
-
+                }
+            )
+        # print(track.__dict__)
     # Convert sets to list of dicts at the end
     artist_favorites = []
     for a in sorted(artist_set):
@@ -224,6 +232,20 @@ async def get_albums(artists):
 
     return album_list
 
+def flatten_track(track):
+
+    for key, value in track.__dict__.items():
+        print(key, type(value))
+
+    return {
+        "track": {
+            "id": track.id,
+            "title": track.title,
+            "duration": track.duration,
+        }
+    }
+
+
 def get_session():
 
     """
@@ -264,6 +286,7 @@ def get_session():
     return _session
 
 # top_tracks = get_top_tracks("Radiohead")
-# tracks = get_tracks("Radiohead","OK Computer")
-# print(tracks)
-favs = get_favorites(artists=["Radiohead","The Strokes"])
+# tracks = get_tracks("Radiohead")
+# print(top_tracks)
+# favs = get_favorites()
+# print(favs)
