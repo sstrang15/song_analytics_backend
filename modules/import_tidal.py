@@ -82,7 +82,7 @@ async def get_favorites(artists=None, albums=None):
     If album is provided, filter tracks for that album.
     """
     session = get_session()         
-    tracks = session.user.favorites.tracks(limit=600)  # get all favorite tracks
+    tracks = session.user.favorites.tracks(limit=2)  # get all favorite tracks
 
     filtered_tracks = []  
 
@@ -99,16 +99,20 @@ async def get_favorites(artists=None, albums=None):
         
         # No filters → append everything
         if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
-            # filtered_tracks.append( track.__dict__)
+            raw_track = track.__dict__
+            clean_track = clean_object(raw_track)
+            # print(clean_track)
+            filtered_tracks.append(clean_track)
+            # filtered_tracks.append(track)
             # flattened_track = flatten_track(track)
             # filtered_tracks.append(flattened_track)
-            filtered_tracks.append(
-                {
-                "Track": track.name,
-                "Album": track_album,
-                "Artist": track_artist,
-                }
-            )
+            # filtered_tracks.append(
+            #     {
+            #     "Track": track.name,
+            #     "Album": track_album,
+            #     "Artist": track_artist,
+            #     }
+            # )
 
             continue  # skip to next track
 
@@ -147,6 +151,16 @@ async def get_favorites(artists=None, albums=None):
         album_favorites.append({"Album": a})
 
     return [filtered_tracks]# , artist_favorites, album_favorites]
+
+def clean_object(obj):
+    cleaned = {}
+    for key, value in obj.items():
+        if isinstance(value, (str,int,float,bool)) or value is None:
+            # this is your "object-like" thing → drop it
+            cleaned[key] = value
+
+    # print(cleaned)
+    return cleaned
 
 async def get_tracks(artists, albums=None):
     """
