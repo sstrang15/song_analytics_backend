@@ -82,7 +82,7 @@ async def get_favorites(artists=None, albums=None):
     If album is provided, filter tracks for that album.
     """
     session = get_session()         
-    tracks = session.user.favorites.tracks(limit=2)  # get all favorite tracks
+    tracks = session.user.favorites.tracks(limit=600)  # get all favorite tracks
 
     filtered_tracks = []  
 
