@@ -3,7 +3,7 @@
 # ==============================================
 import json
 from urllib.parse import parse_qs
-from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_favorites
+from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_favorites, get_artist_byalbum
 
 # ==============================================
 #  CORE ASGI APP  (DO NOT CHANGE)
@@ -33,7 +33,6 @@ async def app(scope, receive, send):
 
         # --- Route handling (EDITABLE VIA match_route / routes) ---
         else:
-
             segments, params, handler = await match_route(path, query_bytes)
             data = await handler(params)
             status = 200
@@ -95,7 +94,7 @@ async def match_route(path, query_string: bytes):
     # Look up handler
     route_key = segments[0] if segments else None
     handler = routes.get(route_key)
-    print(query_params)
+    # print(query_params)
 
     if not handler:
         async def fallback(params):
@@ -122,8 +121,8 @@ async def track_handler(params):
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
-    print(f"tracks are {tracks}")
-    return tracks[0]
+    # print(f"tracks are {tracks}")
+    return [tracks, 'gettracks']
 
 async def album_handler(params):
     """
@@ -132,8 +131,16 @@ async def album_handler(params):
     artist = params.get("artist")
     print(f"Artist is ${artist}")
     albums = await get_albums(artist)
-    return {"albums": albums}
+    return {albums}
 
+async def artist_handler(params):
+    """
+    Example handler for /getartist?album={album}
+    """
+    album = params.get("album")
+    print(f"Album is ${album}")
+    artists = await get_artist_byalbum(album)
+    return [artists[0], 'getartist']
 
 # ==============================================
 # 📤 RESPONSE SENDER (DO NOT CHANGE)
@@ -164,6 +171,6 @@ routes = {
     "gettracks": track_handler,
     "getalbums": album_handler,
     # Add more routes below:
-    # "getartist": artist_handler,
+    "getartist": artist_handler,
     # "search": search_handler,
 }

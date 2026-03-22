@@ -100,7 +100,9 @@ async def get_favorites(artists=None, albums=None):
         # No filters → append everything
         if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
             raw_track = track.__dict__
+            print(f"Raw track is type ${type(raw_track)}")
             clean_track = clean_object(raw_track)
+            print(f"Cleaned track is type ${type(clean_track)}")
             # print(clean_track)
             filtered_tracks.append(clean_track)
             # filtered_tracks.append(track)
@@ -133,13 +135,10 @@ async def get_favorites(artists=None, albums=None):
                     break
 
         if match:
-            filtered_tracks.append(
-                {
-                "Track": track.name,
-                "Album": track_album,
-                "Artist": track_artist,
-                }
-            )
+            raw_track = track.__dict__
+            clean_track = clean_object(raw_track)
+            # print(clean_track)
+            filtered_tracks.append(clean_track)
         # print(track.__dict__)
     # Convert sets to list of dicts at the end
     artist_favorites = []
@@ -150,16 +149,20 @@ async def get_favorites(artists=None, albums=None):
     for a in sorted(album_set):
         album_favorites.append({"Album": a})
 
-    return [filtered_tracks]# , artist_favorites, album_favorites]
+    # print(type(filtered_tracks))
 
+    return filtered_tracks# , artist_favorites, album_favorites]
+
+# Only takes dictionaries
 def clean_object(obj):
     cleaned = {}
+    # print(type(obj))
     for key, value in obj.items():
         if isinstance(value, (str,int,float,bool)) or value is None:
             # this is your "object-like" thing → drop it
             cleaned[key] = value
 
-    # print(cleaned)
+    # print(type(cleaned))
     return cleaned
 
 async def get_tracks(artists, albums=None):
@@ -246,6 +249,38 @@ async def get_albums(artists):
 
     return album_list
 
+# Given an album return the fist artist object corresponding to that album
+async def get_artist_byalbum(album):
+    session = get_session()
+    results = session.search(query=album,models=[tidalapi.Album],limit=300)
+    artist = []
+    for keys, albums in results.items():
+        if (keys == "albums"):
+            for album in albums:
+                raw_artist = album.__dict__["artist"].__dict__
+                clean_artist = clean_object(raw_artist)
+                artist.append(clean_artist)
+    return artist
+
+# Given an album return the fist artist object corresponding to that album
+async def get_artist_bytrack(album):
+    session = get_session()
+    results = session.search(query=album,models=[tidalapi.Album],limit=300)
+    # artist = results["artists"][0]
+    # album_catalog = artist._get_albums()
+    # print(results)
+    artist = {}
+    firstcounter = 1
+    for keys, albums in results.items():
+        if (keys == "albums"):
+            for album in albums:
+                if firstcounter == 1:
+                    artist = album.__dict__["artist"]
+                    firstcounter += 1
+                else:
+                    continue
+    return  artist
+
 def flatten_track(track):
 
     for key, value in track.__dict__.items():
@@ -258,7 +293,6 @@ def flatten_track(track):
             "duration": track.duration,
         }
     }
-
 
 def get_session():
 
@@ -303,4 +337,7 @@ def get_session():
 # tracks = get_tracks("Radiohead")
 # print(top_tracks)
 # favs = get_favorites()
-# print(favs)
+# print(type(favs)[0])
+# artist = get_artist_byalbum("OK+Comptu")
+# print(artist["name"])
+# need to have an array of dictionaries
