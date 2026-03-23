@@ -38,7 +38,7 @@ async def app(scope, receive, send):
             status = 200
 
         # Send final response
-        # print(data)
+        print(data[1])
         print("Data Received ...")
         await send_response(send, status, data)
 
@@ -108,6 +108,22 @@ async def match_route(path, query_string: bytes):
 # ==============================================
 #  HANDLERS (SAFE TO MODIFY / ADD)
 # ==============================================
+async def favorites_handler(params):
+    """
+    Example handler for /gettracks?artist={artist}
+    """
+    artist = params.get("artist")
+    album = params.get("album")  # may be None
+    # return {"handler": "artist_handler", "artist": params.get("artist")}
+    # print(f"artist: {artist}, album: {album}")
+    try:
+        tracks = await get_favorites(artist, album)
+    except Exception as e:
+        print("Error in get_tracks:", e)
+        tracks = []
+    # print(f"tracks are {tracks}")
+    return [tracks, 'getfavorites']
+
 async def track_handler(params):
     """
     Example handler for /gettracks?artist={artist}
@@ -117,7 +133,7 @@ async def track_handler(params):
     # return {"handler": "artist_handler", "artist": params.get("artist")}
     print(f"artist: {artist}, album: {album}")
     try:
-        tracks = await get_favorites(artist, album)
+        tracks = await get_tracks(artist, album)
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
@@ -135,8 +151,9 @@ async def album_handler(params):
 
 async def artist_handler(params):
     """
-    Example handler for /getartist?album={album}
+    Example handler for /getartist?album={album}&track={track}
     """
+    track = params.get("track")
     album = params.get("album")
     print(f"Album is ${album}")
     artists = await get_artist_byalbum(album)
@@ -157,9 +174,9 @@ async def send_response(send, status, data):
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
-    # print(type(body))
-    # print()
-    print(f"The text is ... {body}")
+    print(type(body))
+    print()
+    # print(f"The text is ... ${body}")
 
 
 
@@ -172,5 +189,5 @@ routes = {
     "getalbums": album_handler,
     # Add more routes below:
     "getartist": artist_handler,
-    # "search": search_handler,
+    "getfavorites": favorites_handler,
 }

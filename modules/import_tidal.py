@@ -100,22 +100,11 @@ async def get_favorites(artists=None, albums=None):
         # No filters → append everything
         if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
             raw_track = track.__dict__
-            print(f"Raw track is type ${type(raw_track)}")
+            # print(f"Raw track is type ${type(raw_track)}")
             clean_track = clean_object(raw_track)
-            print(f"Cleaned track is type ${type(clean_track)}")
+            # print(f"Cleaned track is type ${type(clean_track)}")
             # print(clean_track)
             filtered_tracks.append(clean_track)
-            # filtered_tracks.append(track)
-            # flattened_track = flatten_track(track)
-            # filtered_tracks.append(flattened_track)
-            # filtered_tracks.append(
-            #     {
-            #     "Track": track.name,
-            #     "Album": track_album,
-            #     "Artist": track_artist,
-            #     }
-            # )
-
             continue  # skip to next track
 
         # Determine match inside the loop
