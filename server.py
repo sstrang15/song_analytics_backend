@@ -38,7 +38,7 @@ async def app(scope, receive, send):
             status = 200
 
         # Send final response
-        print(data[1])
+        # print(data[1])
         print("Data Received ...")
         await send_response(send, status, data)
 

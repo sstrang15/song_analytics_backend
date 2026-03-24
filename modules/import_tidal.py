@@ -154,89 +154,46 @@ def clean_object(obj):
     # print(type(cleaned))
     return cleaned
 
-async def get_tracks(artists, albums=None):
+def get_tracks(artists):#, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
     """
-    if albums is None:
-        albums = []
+    # if albums is None:
+    #     albums = []
 
-    matches_found = False
     session = get_session() 
     track_list = []
     # ---------------- Entry check ----------------
     # If neither artist nor album list is provided, there's nothing to fetch
-    if artists:
-        results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
-        if results["artists"]:
-            artist = results["artists"][0]
-            album_catalog = artist._get_albums()
-            print("Artist was located")
-        else:
-            print(f"Artist was not located")
-            album_catalog = []
-    else:
-        # Can't match albums without an artist
-        return []
     
-    # Make album filter case-insensitive
-    # albums_lower = [a.name.lower() for a in album_catalog]
-    # print(album_catalog)
-    # print(albums_lower)
-    # print(albums)
-    # Iterate through all albums in album_catalog.
-    # If no album filter is provided, include all albums.
-    # If albums are specified, include only tracks from matching albums.
-    # for album in album_catalog:
-    #     album_name_lower = album.name.lower()
-
-    #     # include all if albums list is empty, otherwise check substring match
-    #     # If albums filter exists, skip albums that don't match
-    #     if not albums_lower or any(a in album_name_lower for a in albums_lower):
-    #         print(albums.lower())
-    #         matches_found = True
-    #         print(album.name.lower())
-    #         tracks = album.tracks()
-    #         for track in tracks:
-    #             # print(f"Album {album.name} was found")
-    #             track_info = {
-    #                 "name": track.name,
-    #                 "popularity": track.popularity,
-    #                 "album": album.name
-    #             }
-    #             track_list.append(track_info)
-
-    # if not matches_found:
-    #     return []  # or handle no matches
-
+    albums = get_albums(artists)
+    for album in albums:
+        track_list.append(album.tracks())    
+    
+    print(track_list[0][0].__dict__)
     return track_list
 
-async def get_albums(artists):
+def get_albums(artists):
     """
     Return albums for the given artist with associated popularity
     """
-    session = get_session()
-    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
-    artist = results["artists"][0]
-    album_catalog = artist._get_albums()
-    album_list = []
-    for album in album_catalog:
-        tracks = album.tracks()
-        popularity = 0
-        for track in tracks:
-            popularity += track.popularity
-        album_info = {
-            "name": album.name,
-            "universal_product_number": album.universal_product_number,     
-            "audiomodes": album.audio_modes,
-            "media": album.media_metadata_tags,
-            "popularity": popularity/len(tracks),
-            "version":album.version,
-            }
-        album_list.append(album_info)
+    session = get_session() 
+    albums = []
+    # ---------------- Entry check ----------------
+    # If neither artist nor album list is provided, there's nothing to fetch
+    results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
+    if results["artists"]:
+        artist = results["artists"][0]
+        album_catalog = artist._get_albums()
+        ep_catalog = artist.get_ep_singles()
+        print("Artist was located")
+        albums = album_catalog
+    else:
+        print(f"Artist was not located")
+        albums = album_catalog
 
-    return album_list
+    return albums
 
 # Given an album return the fist artist object corresponding to that album
 async def get_artist_byalbum(album):
@@ -323,7 +280,8 @@ def get_session():
     return _session
 
 # top_tracks = get_top_tracks("Radiohead")
-# tracks = get_tracks("Radiohead")
+# tracks = get_albums("Radiohead")
+tracks = get_tracks("Radiohead")
 # print(top_tracks)
 # favs = get_favorites()
 # print(type(favs)[0])
