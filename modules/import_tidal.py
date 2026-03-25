@@ -142,11 +142,12 @@ async def get_favorites(artists=None, albums=None):
 
     return filtered_tracks# , artist_favorites, album_favorites]
 
-# Only takes dictionaries
+# Only takes custom object classes
 def clean_object(obj):
     cleaned = {}
+    new_object = obj.__dict__
     # print(type(obj))
-    for key, value in obj.items():
+    for key, value in new_object.items():
         if isinstance(value, (str,int,float,bool)) or value is None:
             # this is your "object-like" thing → drop it
             cleaned[key] = value
@@ -154,32 +155,67 @@ def clean_object(obj):
     # print(type(cleaned))
     return cleaned
 
-def get_tracks(artists):#, albums=None):
+async def get_tracks(artists): # add an ep flag later
     """
     Return tracks for the given artist.
-    If album is provided, filter tracks for that album.
     """
-    # if albums is None:
-    #     albums = []
-
     session = get_session() 
     track_list = []
-    # ---------------- Entry check ----------------
-    # If neither artist nor album list is provided, there's nothing to fetch
-    
-    albums = get_albums(artists)
-    for album in albums:
-        track_list.append(album.tracks())    
-    
-    print(track_list[0][0].__dict__)
-    return track_list
+    clean_track_list = []
+    albums = []
+    clean_albums = []
 
-def get_albums(artists):
+    results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
+    artist = results["artists"][0] # pick the top result as the searchable artist
+
+    # below is where you call tidalapi to get lists of album and epsingles
+    album_catalog = artist._get_albums()
+    ep_catalog = artist.get_ep_singles()
+    albums.extend(ep_catalog)     
+    albums.extend(album_catalog)
+
+    for album in albums:
+        tracks = album.tracks()
+
+        for track in tracks:
+            clean_track = clean_object(track)
+            clean_track_list.append(clean_track)
+
+    return clean_track_list
+
+async def get_album_tracks(albums):
+    """
+    Return tracks for the given album.
+    """
+    session = get_session()
+    tracks = []
+    track_results = []
+    results = []
+    album_filter = []
+    if isinstance(albums, (str)):
+        albums = [albums]
+
+    for album in albums:
+        results = session.search(query=album, models=[tidalapi.Album], limit=1)
+        # print(results)
+        album_filter = results["albums"]
+        for album in album_filter:
+            print(album.name)
+            tracks = album.tracks()
+
+            for track in tracks:
+                clean_track = clean_object(track)
+                track_results.append(clean_track)
+
+    return track_results
+
+async def get_albums(artists):
     """
     Return albums for the given artist with associated popularity
     """
     session = get_session() 
     albums = []
+    album_results = []
     # ---------------- Entry check ----------------
     # If neither artist nor album list is provided, there's nothing to fetch
     results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
@@ -187,16 +223,24 @@ def get_albums(artists):
         artist = results["artists"][0]
         album_catalog = artist._get_albums()
         ep_catalog = artist.get_ep_singles()
+        print(len(ep_catalog))
         print("Artist was located")
-        albums = album_catalog
+        albums.extend(album_catalog)
+        albums.extend(ep_catalog)
     else:
         print(f"Artist was not located")
-        albums = album_catalog
+        # albums = album_catalog
 
-    return albums
+    for album in albums:
+        album_results = clean_object(album)
+        # print(clean_album)
+
+    # print(len(albums))
+
+    return album_results
 
 # Given an album return the fist artist object corresponding to that album
-async def get_artist_byalbum(album):
+def get_artist_byalbum(album):
     session = get_session()
     results = session.search(query=album,models=[tidalapi.Album],limit=300)
     artist = []
@@ -204,8 +248,9 @@ async def get_artist_byalbum(album):
         if (keys == "albums"):
             for album in albums:
                 raw_artist = album.__dict__["artist"].__dict__
-                clean_artist = clean_object(raw_artist)
-                artist.append(clean_artist)
+                
+    lean_artist = clean_object(raw_artist)            
+    artist.append(clean_artist)
     return artist
 
 # Given an album return the fist artist object corresponding to that album
@@ -280,11 +325,17 @@ def get_session():
     return _session
 
 # top_tracks = get_top_tracks("Radiohead")
-# tracks = get_albums("Radiohead")
-tracks = get_tracks("Radiohead")
+# albums = get_albums("Radiohead")
+album_tracks = get_album_tracks(["OK COmput","In R"])
+# print(f"Number of Albums: {len(albums)}")
+# print(album_tracks)
+# tracks = get_tracks("Radiohead")
+# print(tracks)
+# print(len(album_tracks))
+# print(f"Number of Tracks: {len(tracks)}")
 # print(top_tracks)
 # favs = get_favorites()
 # print(type(favs)[0])
-# artist = get_artist_byalbum("OK+Comptu")
-# print(artist["name"])
+artist = get_artist_byalbum("OK Comptu")
+print(artist)
 # need to have an array of dictionaries
