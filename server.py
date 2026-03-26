@@ -147,7 +147,7 @@ async def album_handler(params):
     artist = params.get("artist")
     print(f"Artist is ${artist}")
     albums = await get_albums(artist)
-    return {albums}
+    return [albums, 'getalbums']
 
 async def artist_handler(params):
     """

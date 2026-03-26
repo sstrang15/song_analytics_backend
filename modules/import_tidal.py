@@ -223,7 +223,6 @@ async def get_albums(artists):
         artist = results["artists"][0]
         album_catalog = artist._get_albums()
         ep_catalog = artist.get_ep_singles()
-        print(len(ep_catalog))
         print("Artist was located")
         albums.extend(album_catalog)
         albums.extend(ep_catalog)
@@ -232,10 +231,7 @@ async def get_albums(artists):
         # albums = album_catalog
 
     for album in albums:
-        album_results = clean_object(album)
-        # print(clean_album)
-
-    # print(len(albums))
+        album_results.append(clean_object(album))
 
     return album_results
 
@@ -243,15 +239,14 @@ async def get_albums(artists):
 def get_artist_byalbum(album):
     session = get_session()
     results = session.search(query=album,models=[tidalapi.Album],limit=300)
-    artist = []
-    for keys, albums in results.items():
-        if (keys == "albums"):
-            for album in albums:
-                raw_artist = album.__dict__["artist"].__dict__
+    
+    # for album in results:
+    #     for album in albums:
+    #             raw_artist = album.__dict__["artist"].__dict__
                 
-    lean_artist = clean_object(raw_artist)            
-    artist.append(clean_artist)
-    return artist
+    # lean_artist = clean_object(raw_artist)            
+    # artist.append(clean_artist)
+    # return artist
 
 # Given an album return the fist artist object corresponding to that album
 async def get_artist_bytrack(album):
@@ -260,17 +255,17 @@ async def get_artist_bytrack(album):
     # artist = results["artists"][0]
     # album_catalog = artist._get_albums()
     # print(results)
-    artist = {}
-    firstcounter = 1
-    for keys, albums in results.items():
-        if (keys == "albums"):
-            for album in albums:
-                if firstcounter == 1:
-                    artist = album.__dict__["artist"]
-                    firstcounter += 1
-                else:
-                    continue
-    return  artist
+    # artist = {}
+    # firstcounter = 1
+    # for keys, albums in results.items():
+    #     if (keys == "albums"):
+    #         for album in albums:
+    #             if firstcounter == 1:
+    #                 artist = album.__dict__["artist"]
+    #                 firstcounter += 1
+    #             else:
+    #                 continue
+    # return  artist
 
 def flatten_track(track):
 
@@ -326,7 +321,7 @@ def get_session():
 
 # top_tracks = get_top_tracks("Radiohead")
 # albums = get_albums("Radiohead")
-album_tracks = get_album_tracks(["OK COmput","In R"])
+# album_tracks = get_album_tracks(["OK COmput","In R"])
 # print(f"Number of Albums: {len(albums)}")
 # print(album_tracks)
 # tracks = get_tracks("Radiohead")
@@ -336,6 +331,6 @@ album_tracks = get_album_tracks(["OK COmput","In R"])
 # print(top_tracks)
 # favs = get_favorites()
 # print(type(favs)[0])
-artist = get_artist_byalbum("OK Comptu")
-print(artist)
+# artist = get_artist_byalbum("OK Comptu")
+# print(artist)
 # need to have an array of dictionaries
