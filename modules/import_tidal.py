@@ -99,7 +99,7 @@ async def get_favorites(artists=None, albums=None):
         
         # No filters → append everything
         if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
-            raw_track = track.__dict__
+            raw_track = track
             # print(f"Raw track is type ${type(raw_track)}")
             clean_track = clean_object(raw_track)
             # print(f"Cleaned track is type ${type(clean_track)}")
@@ -124,7 +124,7 @@ async def get_favorites(artists=None, albums=None):
                     break
 
         if match:
-            raw_track = track.__dict__
+            raw_track = track
             clean_track = clean_object(raw_track)
             # print(clean_track)
             filtered_tracks.append(clean_track)
@@ -225,7 +225,7 @@ async def get_albums(artists):
         ep_catalog = artist.get_ep_singles()
         print("Artist was located")
         albums.extend(album_catalog)
-        albums.extend(ep_catalog)
+        # albums.extend(ep_catalog)
     else:
         print(f"Artist was not located")
         # albums = album_catalog
@@ -235,37 +235,45 @@ async def get_albums(artists):
 
     return album_results
 
-# Given an album return the fist artist object corresponding to that album
-def get_artist_byalbum(album):
+# Given an artist return the fist artist object corresponding to search
+async def get_artist(artists):
     session = get_session()
-    results = session.search(query=album,models=[tidalapi.Album],limit=300)
-    
-    # for album in results:
-    #     for album in albums:
-    #             raw_artist = album.__dict__["artist"].__dict__
-                
-    # lean_artist = clean_object(raw_artist)            
-    # artist.append(clean_artist)
-    # return artist
+    if isinstance(artists, (str)):
+        print(f"Y: {artists}")
+        artists = [artists]
+        print(artists)
 
-# Given an album return the fist artist object corresponding to that album
-async def get_artist_bytrack(album):
+    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+    artist = clean_object(results["artists"][0])
+
+    return artist
+
+# Given an album return the fist artist object corresponding to that album search
+async def get_artist_byalbum(albums):
     session = get_session()
-    results = session.search(query=album,models=[tidalapi.Album],limit=300)
-    # artist = results["artists"][0]
-    # album_catalog = artist._get_albums()
-    # print(results)
-    # artist = {}
-    # firstcounter = 1
-    # for keys, albums in results.items():
-    #     if (keys == "albums"):
-    #         for album in albums:
-    #             if firstcounter == 1:
-    #                 artist = album.__dict__["artist"]
-    #                 firstcounter += 1
-    #             else:
-    #                 continue
-    # return  artist
+    if isinstance(albums, (str)):
+        print(f"Y: {albums}")
+        albums = [albums]
+        print(albums)
+
+    results = session.search(query=albums,models=[tidalapi.Album],limit=300)
+    album = results["albums"][0]
+    artist = clean_object(album.artist)
+    
+    return artist
+
+
+# Given a track return the fist artist object corresponding to that album
+async def get_artist_bytrack(tracks):
+    session = get_session()
+#     if isinstance(track, (str)):
+#         print(f"Y: {tracks}")
+#         tracks = [tracks]
+#         print(tracks)
+
+#     results = session.search(query=tracks,models=[tidalapi.Track],limit=300)
+#     artist = clean_object(results["albums"][0]["name"])
+    return  artist
 
 def flatten_track(track):
 
@@ -331,6 +339,8 @@ def get_session():
 # print(top_tracks)
 # favs = get_favorites()
 # print(type(favs)[0])
-# artist = get_artist_byalbum("OK Comptu")
+# artist = get_artist_byalbum("Ok COmp")
+# print(artist)
+# artist = get_artist("xxyy")
 # print(artist)
 # need to have an array of dictionaries

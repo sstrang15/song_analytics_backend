@@ -3,7 +3,7 @@
 # ==============================================
 import json
 from urllib.parse import parse_qs
-from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_favorites, get_artist_byalbum
+from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_artist, get_favorites, get_artist_byalbum, get_album_tracks
 
 # ==============================================
 #  CORE ASGI APP  (DO NOT CHANGE)
@@ -103,11 +103,11 @@ async def match_route(path, query_string: bytes):
 
     return segment_dict, dict(query_params), handler
 
-
-
 # ==============================================
 #  HANDLERS (SAFE TO MODIFY / ADD)
 # ==============================================
+# This is for getting user specific information, eventually, favorite artists, favorite albums, but for now tracks is enough
+# Eventually will be used to get playlists
 async def favorites_handler(params):
     """
     Example handler for /gettracks?artist={artist}
@@ -124,7 +124,8 @@ async def favorites_handler(params):
     # print(f"tracks are {tracks}")
     return [tracks, 'getfavorites']
 
-async def track_handler(params):
+# This is for getting tracks and track information
+async def track_handler(params): 
     """
     Example handler for /gettracks?artist={artist}
     """
@@ -133,31 +134,63 @@ async def track_handler(params):
     # return {"handler": "artist_handler", "artist": params.get("artist")}
     print(f"artist: {artist}, album: {album}")
     try:
-        tracks = await get_tracks(artist, album)
+        if artist is None and album is not None:
+            tracks = await get_album_tracks(album)
+        elif artist is not None:
+            tracks = await get_tracks(artist) 
+
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
     # print(f"tracks are {tracks}")
     return [tracks, 'gettracks']
 
+# This is for getting albums and album information
 async def album_handler(params):
     """
-    Example handler for /getalbums?artist={artist}
+    Example handler for /getalbums?artist={artist}&track={tracks}
     """
     artist = params.get("artist")
+    tracks = params.get("tracks")
     print(f"Artist is ${artist}")
-    albums = await get_albums(artist)
+    try:
+        if artist:
+            albums = await get_albums(artist)
+        elif tracks:
+            albums = await get_albums(tracks)
+    except Exception as e:
+        print("Error in getalbums:", e)
+        albums = []
+
     return [albums, 'getalbums']
 
+# This is for getting artist information
 async def artist_handler(params):
     """
-    Example handler for /getartist?album={album}&track={track}
+    Example handler for /getartist?artist={artist}&album={album}&track={track}
     """
+    artist = params.get("artist")
     track = params.get("track")
     album = params.get("album")
-    print(f"Album is ${album}")
-    artists = await get_artist_byalbum(album)
-    return [artists[0], 'getartist']
+    print(f"Album is {album}, Artist is {artist}, Track is {track}")
+    try:
+        if album is not None:
+            print(f"get_artist_byalbum was called")
+            artists = await get_artist_byalbum(album)
+        elif track is not None:
+            print(f"get_artist_bytrack was called")
+            artists = await get_artist_bytrack(track)
+        elif artist is not None:
+            print(f"get_artist was called")
+            artists = await get_artist(artist)
+
+    except Exception as e:
+        print("Error in getartist:", e)
+        len(artists)
+        artists = []
+
+    print(artists)
+    return [artists, 'getartist']
 
 # ==============================================
 # 📤 RESPONSE SENDER (DO NOT CHANGE)
