@@ -131,13 +131,16 @@ async def track_handler(params):
     """
     artist = params.get("artist")
     album = params.get("album")  # may be None
+    track = params.get("track")
     # return {"handler": "artist_handler", "artist": params.get("artist")}
-    print(f"artist: {artist}, album: {album}")
+    print(f"artist: {artist}, album: {album}, track {track}")
     try:
         if artist is None and album is not None:
             tracks = await get_album_tracks(album)
         elif artist is not None:
-            tracks = await get_tracks(artist) 
+            tracks = await get_tracks(artist)
+        else:
+            tracks = await get_tracks(track)
 
     except Exception as e:
         print("Error in get_tracks:", e)
@@ -151,6 +154,7 @@ async def album_handler(params):
     Example handler for /getalbums?artist={artist}&track={tracks}
     """
     artist = params.get("artist")
+    album = params.get("album")
     tracks = params.get("tracks")
     print(f"Artist is ${artist}")
     try:
@@ -186,7 +190,6 @@ async def artist_handler(params):
 
     except Exception as e:
         print("Error in getartist:", e)
-        len(artists)
         artists = []
 
     print(artists)
@@ -207,7 +210,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
-    print(type(body))
+    print(body)
     print()
     # print(f"The text is ... ${body}")
 

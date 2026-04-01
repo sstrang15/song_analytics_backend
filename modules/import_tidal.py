@@ -164,7 +164,6 @@ async def get_tracks(artists): # add an ep flag later
     clean_track_list = []
     albums = []
     clean_albums = []
-
     results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
     artist = results["artists"][0] # pick the top result as the searchable artist
 
@@ -238,15 +237,14 @@ async def get_albums(artists):
 # Given an artist return the fist artist object corresponding to search
 async def get_artist(artists):
     session = get_session()
+    artist_results = []
     if isinstance(artists, (str)):
-        print(f"Y: {artists}")
         artists = [artists]
-        print(artists)
+    for artist in artists:
+        results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
+        artist_results.append(clean_object(results["artists"][0]))
 
-    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
-    artist = clean_object(results["artists"][0])
-
-    return artist
+    return artist_results
 
 # Given an album return the fist artist object corresponding to that album search
 async def get_artist_byalbum(albums):
