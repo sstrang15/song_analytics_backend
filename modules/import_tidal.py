@@ -8,6 +8,7 @@ import json
 import os
 import requests
 import asyncio
+import datetime
 import pandas as pd
 from pathlib import Path
 import pathlib
@@ -63,7 +64,7 @@ def track_to_dict(track):
     }
 
 # ---------------- Track Endpoint -------------------
-async def get_top_tracks(artists, albums=None):
+def get_top_tracks(artists, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
@@ -73,9 +74,9 @@ async def get_top_tracks(artists, albums=None):
     results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
     artist = results["artists"][0]
     tracks = artist.get_top_tracks(limit = 60)
+    # print(tracks)
     # Make a filter for album if provided
-    return [track_to_dict(track) for track in tracks]
-
+    return tracks
 async def get_favorites(artists=None, albums=None):
     """
     Return favorited tracks that match filter
@@ -264,27 +265,66 @@ async def get_artist_byalbum(albums):
 # Given a track return the fist artist object corresponding to that album
 async def get_artist_bytrack(tracks):
     session = get_session()
-#     if isinstance(track, (str)):
-#         print(f"Y: {tracks}")
-#         tracks = [tracks]
-#         print(tracks)
+    if isinstance(track, (str)):
+        print(f"Y: {tracks}")
+        tracks = [tracks]
+        print(tracks)
 
 #     results = session.search(query=tracks,models=[tidalapi.Track],limit=300)
 #     artist = clean_object(results["albums"][0]["name"])
     return  artist
 
+# Given a class turned into a dictionary, transform into a flattened dictionary
 def flatten_track(track):
+    final_tracks = []
+    final_result = {}
+    # head_key = type(track).__name__.lower()
+    # print(head_key)
+    master_list = []
+    for t in track:
+        jso = {}
+        head_key = type(t).__name__.lower()
+        track = t.__dict__
+        track_list = []
+        for key, value in track.items():
+            placeholder = {}
+            # print(f"{key} is key, {value} is value")
+#             # located a class in value
+            if isinstance(value, (str, int, float, bool, list, dict, datetime.datetime)) or value is None:
+                placeholder[head_key] = {key: value}
+                # print(f"Normal value found: {placeholder[head_key]}")
+#             # else:
+#                 # placeholder[key] = value
+            track_list.append(placeholder)
+            # print(track_list)
+    # at this point we have hopefully created a list of dictionaries with 1 key and 1 value
+        master_list.append(track_list)
+        final_result[head_key] = {}
+    # print(tracks)
+    # # tracks.append(placeholder)
+    # print(master_list)
+    ## the goal for this section is to using this list of dictionaries unpack them and coallesce into 1 dictionary and do that for each item in list ## 
+    for track in master_list:
+        # print(type(track))
+        result = {}
+        for t in track:
+            if not t:
+                continue
 
-    for key, value in track.__dict__.items():
-        print(key, type(value))
-
-    return {
-        "track": {
-            "id": track.id,
-            "title": track.title,
-            "duration": track.duration,
-        }
-    }
+            for outer_key, inner_data in t.items():
+                # jso[]
+                # print(f"Outer Key is {outer_key} and data is {inner_data}")
+                if outer_key not in result:
+                    result[outer_key] = {}
+                for key, value in inner_data.items():
+                    result[outer_key][key] = value
+    
+    for track in final_tracks:
+        print(final_tracks["full_name"])
+    # print(jso)
+    # print(track.__dict__)
+    # print(json.dumps(tracks[0],indent=4))
+    return final_tracks
 
 def get_session():
 
@@ -325,7 +365,7 @@ def get_session():
     _session = session
     return _session
 
-# top_tracks = get_top_tracks("Radiohead")
+top_tracks = get_top_tracks("Radiohead")
 # albums = get_albums("Radiohead")
 # album_tracks = get_album_tracks(["OK COmput","In R"])
 # print(f"Number of Albums: {len(albums)}")
@@ -342,3 +382,6 @@ def get_session():
 # artist = get_artist("xxyy")
 # print(artist)
 # need to have an array of dictionaries
+
+top = flatten_track(top_tracks)
+# print(top[0])
