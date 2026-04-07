@@ -156,7 +156,7 @@ def clean_object(obj):
     # print(type(cleaned))
     return cleaned
 
-async def get_tracks(artists): # add an ep flag later
+def get_tracks(artists): # add an ep flag later
     """
     Return tracks for the given artist.
     """
@@ -275,56 +275,80 @@ async def get_artist_bytrack(tracks):
     return  artist
 
 # Given a class turned into a dictionary, transform into a flattened dictionary
-def flatten_track(track):
-    final_tracks = []
-    final_result = {}
-    # head_key = type(track).__name__.lower()
-    # print(head_key)
-    master_list = []
-    for t in track:
-        jso = {}
-        head_key = type(t).__name__.lower()
-        track = t.__dict__
-        track_list = []
-        for key, value in track.items():
-            placeholder = {}
-            # print(f"{key} is key, {value} is value")
-#             # located a class in value
-            if isinstance(value, (str, int, float, bool, list, dict, datetime.datetime)) or value is None:
-                placeholder[head_key] = {key: value}
-                # print(f"Normal value found: {placeholder[head_key]}")
-#             # else:
-#                 # placeholder[key] = value
-            track_list.append(placeholder)
-            # print(track_list)
+def flatten_track(data):
+    master_tracks = [];
+    print(f"Data is {len(data)} long")
+    compiled_count = 0
+    for track in data[0:3]:
+        parent_key = type(track).__name__.lower()
+        compiled_tracks = []
+        for p_key, p_value in track.__dict__.items():
+            track = {}
+            if isinstance(p_value, (str, int, float, bool, dict, datetime.datetime)) or p_value is None:
+                track[parent_key] = {p_key: p_value}
+
+            else:
+                # Value of field will need further investigation is it a list or a custom class
+                if isinstance(p_value, (list)):
+                    # Value is a list loop through it
+                    values = []
+                    for object_list in p_value:
+                        # List is just normal values
+                        if isinstance(object_list, (str, int, float, bool, dict, datetime.datetime)) or object_list is None:
+                            values.append(object_list)    
+                        
+                        # List contains custom classes                        
+                        else:
+                            child_key = type(object_list).__name__.lower()
+                            # print(f"{p_key} was found we are inside list")
+                            for objects in object_list.__dict__:
+                                # print(objects)
+                                t = []
+
+                    track[parent_key] = {p_key: values}
+
+                else: 
+                    child_key = type(p_value).__name__.lower()
+                    # print(f"{child_key} was found we are nested")
+
+                    for c_key, c_value in clean_object(p_value).items():
+                        # print(f"Child level, key value found: {c_key}: {c_value}")
+                        track[parent_key] = {c_key: c_value}
+
+            compiled_tracks.append(track)
+        # compiled_count += 1
+        # print(f"{compiled_count} is compiled count")
+
+        master_tracks.append(compiled_tracks)
+        
+    print(len(master_tracks))
     # at this point we have hopefully created a list of dictionaries with 1 key and 1 value
-        master_list.append(track_list)
-        final_result[head_key] = {}
+    # final_result[head_key] = {}
     # print(tracks)
     # # tracks.append(placeholder)
-    # print(master_list)
+    print(master_tracks)
     ## the goal for this section is to using this list of dictionaries unpack them and coallesce into 1 dictionary and do that for each item in list ## 
-    for track in master_list:
-        # print(type(track))
-        result = {}
-        for t in track:
-            if not t:
-                continue
+    # for track in master_list:
+    #     # print(type(track))
+    #     result = {}
+    #     for t in track:
+    #         if not t:
+    #             continue
 
-            for outer_key, inner_data in t.items():
-                # jso[]
-                # print(f"Outer Key is {outer_key} and data is {inner_data}")
-                if outer_key not in result:
-                    result[outer_key] = {}
-                for key, value in inner_data.items():
-                    result[outer_key][key] = value
+    #         for outer_key, inner_data in t.items():
+    #             # jso[]
+    #             # print(f"Outer Key is {outer_key} and data is {inner_data}")
+    #             if outer_key not in result:
+    #                 result[outer_key] = {}
+    #             for key, value in inner_data.items():
+    #                 result[outer_key][key] = value
     
-    for track in final_tracks:
-        print(final_tracks["full_name"])
+    # for track in final_tracks:
+    #     print(final_tracks["full_name"])
     # print(jso)
     # print(track.__dict__)
     # print(json.dumps(tracks[0],indent=4))
-    return final_tracks
+    return compiled_tracks
 
 def get_session():
 
@@ -366,12 +390,12 @@ def get_session():
     return _session
 
 top_tracks = get_top_tracks("Radiohead")
+print(len(top_tracks))
 # albums = get_albums("Radiohead")
 # album_tracks = get_album_tracks(["OK COmput","In R"])
 # print(f"Number of Albums: {len(albums)}")
 # print(album_tracks)
 # tracks = get_tracks("Radiohead")
-# print(tracks)
 # print(len(album_tracks))
 # print(f"Number of Tracks: {len(tracks)}")
 # print(top_tracks)
@@ -384,4 +408,4 @@ top_tracks = get_top_tracks("Radiohead")
 # need to have an array of dictionaries
 
 top = flatten_track(top_tracks)
-# print(top[0])
+# print(type(top))
