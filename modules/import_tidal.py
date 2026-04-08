@@ -279,76 +279,101 @@ def flatten_track(data):
     master_tracks = [];
     print(f"Data is {len(data)} long")
     compiled_count = 0
-    for track in data[0:3]:
+    for track in data[:3]:
         parent_key = type(track).__name__.lower()
         compiled_tracks = []
         for p_key, p_value in track.__dict__.items():
-            track = {}
+
+            # primitive / safe values
             if isinstance(p_value, (str, int, float, bool, dict, datetime.datetime)) or p_value is None:
-                track[parent_key] = {p_key: p_value}
+                compiled_tracks.append({
+                    parent_key: {p_key: p_value}
+                })
 
-            else:
-                # Value of field will need further investigation is it a list or a custom class
-                if isinstance(p_value, (list)):
-                    # Value is a list loop through it
-                    values = []
-                    for object_list in p_value:
-                        # List is just normal values
-                        if isinstance(object_list, (str, int, float, bool, dict, datetime.datetime)) or object_list is None:
-                            values.append(object_list)    
+            # lists
+            elif isinstance(p_value, list):
+                simple = True
+
+                for v in p_value:
+                    if not (isinstance(v, (str, int, float, bool, dict, datetime.datetime)) or v is None):
+                        simple = False
+                        break
+
+                # simple list stays under track
+                if simple:
+                    compiled_tracks.append({
+                        parent_key: {p_key: p_value}
+                    })
+
+                # object list → emit new entity fragments
+                else:
+                    for obj in p_value:
+                        if hasattr(obj, "__dict__"):
+                            child_key = type(obj).__name__.lower()
+
+                            for c_key, c_value in obj.__dict__.items():
+                                compiled_tracks.append({
+                                    child_key: {c_key: c_value}
+                                })
+            #                 values.append(object_list)    
                         
-                        # List contains custom classes                        
-                        else:
-                            child_key = type(object_list).__name__.lower()
-                            # print(f"{p_key} was found we are inside list")
-                            for objects in object_list.__dict__:
-                                # print(objects)
-                                t = []
+            #             # List contains custom classes                        
+            #             else:
+            #                 child_key = type(object_list).__name__.lower()
+            #                 # print(f"{p_key} was found we are inside list")
+            #                 for objects in object_list.__dict__:
+            #                     # print(objects)
+            #                     t = []
 
-                    track[parent_key] = {p_key: values}
+            #         fragment[parent_key] = {p_key: values}
 
-                else: 
-                    child_key = type(p_value).__name__.lower()
-                    # print(f"{child_key} was found we are nested")
+            #     else: 
+            #         child_key = type(p_value).__name__.lower()
+            #         # print(f"{child_key} was found we are nested")
+            #         # print(p_value)
+                    
+            #         for c_key, c_value in clean_object(p_value).items():
+            #             # print(f"Child level, key value found: {c_key}: {c_value}")
+            #             fragment[child_key] = {c_key: c_value}
+            #             child_object.append(track)
 
-                    for c_key, c_value in clean_object(p_value).items():
-                        # print(f"Child level, key value found: {c_key}: {c_value}")
-                        track[parent_key] = {c_key: c_value}
-
-            compiled_tracks.append(track)
+            # if child_object:
+            #     compiled_tracks.extend(child_object)
+            # else:
+            #     compiled_tracks.append(fragment)
         # compiled_count += 1
         # print(f"{compiled_count} is compiled count")
 
         master_tracks.append(compiled_tracks)
-        
-    print(len(master_tracks))
-    # at this point we have hopefully created a list of dictionaries with 1 key and 1 value
-    # final_result[head_key] = {}
-    # print(tracks)
+    print(master_tracks[0])
     # # tracks.append(placeholder)
-    print(master_tracks)
+    # at this point we have hopefully created a list of dictionaries with 1 key and 1 value
     ## the goal for this section is to using this list of dictionaries unpack them and coallesce into 1 dictionary and do that for each item in list ## 
-    # for track in master_list:
-    #     # print(type(track))
-    #     result = {}
-    #     for t in track:
-    #         if not t:
-    #             continue
+    # 🔥 rebuild phase
+    flattened_result = []
 
-    #         for outer_key, inner_data in t.items():
-    #             # jso[]
-    #             # print(f"Outer Key is {outer_key} and data is {inner_data}")
-    #             if outer_key not in result:
-    #                 result[outer_key] = {}
-    #             for key, value in inner_data.items():
-    #                 result[outer_key][key] = value
-    
-    # for track in final_tracks:
-    #     print(final_tracks["full_name"])
+    for track_fragments in master_tracks:
+        track_result = {}
+
+        for fragment in track_fragments:
+            for parent_key, inner in fragment.items():
+
+                if parent_key not in track_result:
+                    track_result[parent_key] = {}
+
+                for key, value in inner.items():
+                    track_result[parent_key][key] = value
+
+        flattened_result.append(track_result)
+
+    # debug output
+    for track in flattened_result:
+        print(track["track"]["full_name"])
+
     # print(jso)
     # print(track.__dict__)
     # print(json.dumps(tracks[0],indent=4))
-    return compiled_tracks
+    return flattened_result
 
 def get_session():
 
