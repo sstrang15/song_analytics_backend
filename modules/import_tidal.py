@@ -127,6 +127,7 @@ async def get_favorites(artists=None, albums=None):
         if match:
             raw_track = track
             clean_track = clean_object(raw_track)
+            flatten_track(clean_track)
             # print(clean_track)
             filtered_tracks.append(clean_track)
         # print(track.__dict__)
@@ -156,7 +157,7 @@ def clean_object(obj):
     # print(type(cleaned))
     return cleaned
 
-def get_tracks(artists): # add an ep flag later
+async def get_tracks(artists): # add an ep flag later
     """
     Return tracks for the given artist.
     """
@@ -171,6 +172,7 @@ def get_tracks(artists): # add an ep flag later
     # below is where you call tidalapi to get lists of album and epsingles
     album_catalog = artist._get_albums()
     ep_catalog = artist.get_ep_singles()
+
     albums.extend(ep_catalog)     
     albums.extend(album_catalog)
 
@@ -178,10 +180,12 @@ def get_tracks(artists): # add an ep flag later
         tracks = album.tracks()
 
         for track in tracks:
-            clean_track = clean_object(track)
-            clean_track_list.append(clean_track)
+            track_list.append(track)
 
-    return clean_track_list
+    # FLATTEN HERE
+    flattened_tracks = flatten_track(track_list)
+
+    return flattened_tracks
 
 async def get_album_tracks(albums):
     """
@@ -274,24 +278,33 @@ async def get_artist_bytrack(tracks):
 #     artist = clean_object(results["albums"][0]["name"])
     return  artist
 
+def normalize_value(value):
+
+    # unwrap single-item list
+    if isinstance(value, list) and len(value) == 1:
+        value = value[0]
+
+    if isinstance(value, (str, int, float, bool, dict)) or value is None:
+        return value
+
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+
+    return value if isinstance(value, (str, int, float, bool, dict)) or value is None else None
+
 # Given a class turned into a dictionary, transform into a flattened dictionary
 def flatten_track(data):
     master_tracks = [];
     print(f"Data is {len(data)} long")
     compiled_count = 0
-    for track in data[:3]:
+    ENTITY_KEYS = {"artist", "album"}
+    for track in data:
         parent_key = type(track).__name__.lower()
         compiled_tracks = []
         for p_key, p_value in track.__dict__.items():
 
-            # primitive / safe values
-            if isinstance(p_value, (str, int, float, bool, dict, datetime.datetime)) or p_value is None:
-                compiled_tracks.append({
-                    parent_key: {p_key: p_value}
-                })
-
-            # lists
-            elif isinstance(p_value, list):
+            # lists FIRST
+            if isinstance(p_value, list):
                 simple = True
 
                 for v in p_value:
@@ -299,57 +312,59 @@ def flatten_track(data):
                         simple = False
                         break
 
-                # simple list stays under track
+                # simple list
                 if simple:
-                    compiled_tracks.append({
-                        parent_key: {p_key: p_value}
-                    })
+                    normalized = normalize_value(p_value)
 
-                # object list → emit new entity fragments
+                    if normalized is not None:
+                        compiled_tracks.append({
+                            parent_key: {p_key: normalized}
+                        })
+
+                # list of objects
                 else:
                     for obj in p_value:
                         if hasattr(obj, "__dict__"):
                             child_key = type(obj).__name__.lower()
 
-                            for c_key, c_value in obj.__dict__.items():
-                                compiled_tracks.append({
-                                    child_key: {c_key: c_value}
-                                })
-            #                 values.append(object_list)    
-                        
-            #             # List contains custom classes                        
-            #             else:
-            #                 child_key = type(object_list).__name__.lower()
-            #                 # print(f"{p_key} was found we are inside list")
-            #                 for objects in object_list.__dict__:
-            #                     # print(objects)
-            #                     t = []
+                            if child_key in ENTITY_KEYS:
+                                for c_key, c_value in obj.__dict__.items():
 
-            #         fragment[parent_key] = {p_key: values}
+                                    normalized = normalize_value(c_value)
 
-            #     else: 
-            #         child_key = type(p_value).__name__.lower()
-            #         # print(f"{child_key} was found we are nested")
-            #         # print(p_value)
-                    
-            #         for c_key, c_value in clean_object(p_value).items():
-            #             # print(f"Child level, key value found: {c_key}: {c_value}")
-            #             fragment[child_key] = {c_key: c_value}
-            #             child_object.append(track)
+                                    if normalized is not None:
+                                        compiled_tracks.append({
+                                            child_key: {c_key: normalized}
+                                        })
 
-            # if child_object:
-            #     compiled_tracks.extend(child_object)
-            # else:
-            #     compiled_tracks.append(fragment)
-        # compiled_count += 1
-        # print(f"{compiled_count} is compiled count")
+            # single object (like album)
+            elif hasattr(p_value, "__dict__"):
+                child_key = type(p_value).__name__.lower()
+
+                if child_key in ENTITY_KEYS:
+                    for c_key, c_value in p_value.__dict__.items():
+
+                        normalized = normalize_value(c_value)
+
+                        if normalized is not None:
+                            compiled_tracks.append({
+                                child_key: {c_key: normalized}
+                            })
+
+            # PRIMITIVES LAST
+            else:
+                normalized = normalize_value(p_value)
+
+                if normalized is not None:
+                    compiled_tracks.append({
+                        parent_key: {p_key: normalized}
+                    })
 
         master_tracks.append(compiled_tracks)
-    print(master_tracks[0])
-    # # tracks.append(placeholder)
     # at this point we have hopefully created a list of dictionaries with 1 key and 1 value
-    ## the goal for this section is to using this list of dictionaries unpack them and coallesce into 1 dictionary and do that for each item in list ## 
-    # 🔥 rebuild phase
+    
+    # print(master_tracks[0:2])
+    # Rebuild phase
     flattened_result = []
 
     for track_fragments in master_tracks:
@@ -362,6 +377,8 @@ def flatten_track(data):
                     track_result[parent_key] = {}
 
                 for key, value in inner.items():
+                    # track_result[parent_key][key] = value
+                    # print("REBUILD:", key, type(value), value)
                     track_result[parent_key][key] = value
 
         flattened_result.append(track_result)
@@ -369,10 +386,10 @@ def flatten_track(data):
     # debug output
     for track in flattened_result:
         print(track["track"]["full_name"])
-
+    # print(flattened_result)
     # print(jso)
     # print(track.__dict__)
-    # print(json.dumps(tracks[0],indent=4))
+    print(json.dumps(flattened_result,indent=4))
     return flattened_result
 
 def get_session():
@@ -414,8 +431,8 @@ def get_session():
     _session = session
     return _session
 
-top_tracks = get_top_tracks("Radiohead")
-print(len(top_tracks))
+# top_tracks = get_top_tracks("Radiohead")
+# print(len(top_tracks))
 # albums = get_albums("Radiohead")
 # album_tracks = get_album_tracks(["OK COmput","In R"])
 # print(f"Number of Albums: {len(albums)}")
@@ -432,5 +449,5 @@ print(len(top_tracks))
 # print(artist)
 # need to have an array of dictionaries
 
-top = flatten_track(top_tracks)
+# top = flatten_track(top_tracks)
 # print(type(top))
