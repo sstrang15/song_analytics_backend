@@ -211,7 +211,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
     print(body)
-    print()
+    # print()
     # print(f"The text is ... ${body}")
 
 

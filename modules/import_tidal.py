@@ -77,72 +77,52 @@ def get_top_tracks(artists, albums=None):
     # print(tracks)
     # Make a filter for album if provided
     return tracks
+
 async def get_favorites(artists=None, albums=None):
     """
     Return favorited tracks that match filter
     If album is provided, filter tracks for that album.
     """
+    
     session = get_session()         
-    tracks = session.user.favorites.tracks(limit=600)  # get all favorite tracks
-
+    
+    favorites = session.user.favorites.tracks(limit=600)  # creates a list of media objects
     filtered_tracks = []  
 
-    artist_set = set()
-    album_set = set()
+    if isinstance(artists, str):
+        artists = [artists] 
 
-    for track in tracks:
+    if isinstance(albums, str):
+        albums = [albums]
+
+    artists = [a.lower().strip() for a in artists] if artists else []
+    albums = [a.lower().strip() for a in albums] if albums else []
+
+    for favorite in favorites:
         # Collect all artists and albums    
-        artist_set.add(track.artist.name)
-        album_set.add(track.album.name)        
 
-        track_album = track.album.name
-        track_artist = track.artist.name
-        
-        # No filters → append everything
-        if not artists and not albums:# and track.album == "OK Computer OKNOTOK 1997 2017":
-            raw_track = track
-            # print(f"Raw track is type ${type(raw_track)}")
-            clean_track = clean_object(raw_track)
-            # print(f"Cleaned track is type ${type(clean_track)}")
-            # print(clean_track)
-            filtered_tracks.append(clean_track)
-            continue  # skip to next track
+        track_artist = favorite.artist.name.lower().strip()
+        track_album = favorite.album.name.lower().strip()
 
-        # Determine match inside the loop
-        match = False
+        # No filters
+        if not artists and not albums:
+            filtered_tracks.append(favorite)
+            continue
 
-        # Albums have highest priority
+        match = True
+
+        # Artist filter (substring match)
+        if artists:
+            match = any(a in track_artist for a in artists)
+
+        # Album filter (substring match)
         if albums:
-            for a in albums:
-                if a.lower() in track_album.lower():
-                    match = True
-                    break
-        # If no album filter, check artist
-        elif artists:
-            for a in artists:
-                if track_artist == a:
-                    match = True
-                    break
+            match = match and any(a in track_album for a in albums)
 
         if match:
-            raw_track = track
-            clean_track = clean_object(raw_track)
-            flatten_track(clean_track)
-            # print(clean_track)
-            filtered_tracks.append(clean_track)
-        # print(track.__dict__)
-    # Convert sets to list of dicts at the end
-    artist_favorites = []
-    for a in sorted(artist_set):
-        artist_favorites.append({"Artist": a})
+            filtered_tracks.append(favorite)
 
-    album_favorites = []
-    for a in sorted(album_set):
-        album_favorites.append({"Album": a})
-
-    # print(type(filtered_tracks))
-
-    return filtered_tracks# , artist_favorites, album_favorites]
+    return flatten_track(filtered_tracks)
 
 # Only takes custom object classes
 def clean_object(obj):
@@ -162,10 +142,7 @@ async def get_tracks(artists): # add an ep flag later
     Return tracks for the given artist.
     """
     session = get_session() 
-    track_list = []
-    clean_track_list = []
     albums = []
-    clean_albums = []
     results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
     artist = results["artists"][0] # pick the top result as the searchable artist
 
@@ -295,7 +272,7 @@ def normalize_value(value):
 # Given a class turned into a dictionary, transform into a flattened dictionary
 def flatten_track(data):
     master_tracks = [];
-    print(f"Data is {len(data)} long")
+    # print(f"Data is {len(data)} long")
     compiled_count = 0
     ENTITY_KEYS = {"artist", "album"}
     for track in data:
@@ -384,12 +361,12 @@ def flatten_track(data):
         flattened_result.append(track_result)
 
     # debug output
-    for track in flattened_result:
-        print(track["track"]["full_name"])
+    # for track in flattened_result:
+    #     print(track["track"]["full_name"])
     # print(flattened_result)
     # print(jso)
     # print(track.__dict__)
-    print(json.dumps(flattened_result,indent=4))
+    # print(json.dumps(flattened_result,indent=4))
     return flattened_result
 
 def get_session():
@@ -441,8 +418,8 @@ def get_session():
 # print(len(album_tracks))
 # print(f"Number of Tracks: {len(tracks)}")
 # print(top_tracks)
-# favs = get_favorites()
-# print(type(favs)[0])
+# favs = get_favorites(albums={"Kid"})
+# print(favs)
 # artist = get_artist_byalbum("Ok COmp")
 # print(artist)
 # artist = get_artist("xxyy")
