@@ -2,6 +2,7 @@
 # server.py
 # ==============================================
 import json
+import time
 from urllib.parse import parse_qs
 from modules.import_tidal import get_tracks, get_top_tracks, get_albums, get_artist, get_favorites, get_artist_byalbum, get_album_tracks
 
@@ -104,6 +105,29 @@ async def match_route(path, query_string: bytes):
     return segment_dict, dict(query_params), handler
 
 # ==============================================
+#  CORE UTILITIES
+# ==============================================
+# Shared functions that support request handling and data transformation.
+# Acts as a foundation layer for keeping code consistent and maintainable.
+
+def parameter_splitter(value):
+    """
+    Input is always a list from the request layer.
+    This function flattens and splits comma-separated values.
+    """
+    if not value:
+        return []
+
+    result = []
+
+    for item in value or []:
+        result.extend(
+            v.strip() for v in item.split(",") if v.strip()
+        )
+
+    return result
+
+# ==============================================
 #  HANDLERS (SAFE TO MODIFY / ADD)
 # ==============================================
 # This is for getting user specific information, eventually, favorite artists, favorite albums, but for now tracks is enough
@@ -113,14 +137,21 @@ async def favorites_handler(params):
     Example handler for /gettracks?artist={artist}
     """
     artist = params.get("artist")
-    album = params.get("album")  # may be None
+    album = params.get("album")  
+    top = params.get("top")
+
+    # may be None
     # return {"handler": "artist_handler", "artist": params.get("artist")}
-    # print(f"artist: {artist}, album: {album}")
+    print(f"artist: {artist}, album: {album}, top: {top}")
+    start = time.perf_counter()
     try:
         tracks = await get_favorites(artist, album)
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
+
+    end = time.perf_counter()
+    print(f"[TIMER] took {end - start:.3f}s")
     # print(f"tracks are {tracks}")
     return [tracks, 'getfavorites']
 
@@ -129,22 +160,34 @@ async def track_handler(params):
     """
     Example handler for /gettracks?artist={artist}
     """
-    artist = params.get("artist")
-    album = params.get("album")  # may be None
-    track = params.get("track")
+    artist = parameter_splitter(params.get("artist"))
+    album = parameter_splitter(params.get("album"))
+    track = parameter_splitter(params.get("track"))
+    top = params.get("top")
     # return {"handler": "artist_handler", "artist": params.get("artist")}
-    print(f"artist: {artist}, album: {album}, track {track}")
+    print(f"artist: {artist}, album: {album}, track {track}, top: {top}")
+    start = time.perf_counter()
     try:
-        if artist is None and album is not None:
-            tracks = await get_album_tracks(album)
-        elif artist is not None:
-            tracks = await get_tracks(artist)
+        if top[0] == 'Y':
+            tracks = await get_top_tracks(artist)
         else:
-            tracks = await get_tracks(track)
-
+            if not artist and album:
+                # print("albums")
+                tracks = await get_album_tracks(album)
+            elif artist:
+                # print("artist")
+                tracks = await get_tracks(artist)
+            elif track:
+                # print("track")
+                tracks = await get_tracks(track)
+            else:
+                tracks = []
+            
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
+    end = time.perf_counter()
+    print(f"[TIMER] took {end - start:.3f}s")
     # print(f"tracks are {tracks}")
     return [tracks, 'gettracks']
 
@@ -156,6 +199,7 @@ async def album_handler(params):
     artist = params.get("artist")
     album = params.get("album")
     tracks = params.get("tracks")
+    top = params.get("top")
     print(f"Artist is ${artist}")
     try:
         if artist:
@@ -165,7 +209,8 @@ async def album_handler(params):
     except Exception as e:
         print("Error in getalbums:", e)
         albums = []
-
+    end = time.perf_counter()
+    print(f"[TIMER] took {end - start:.3f}s")
     return [albums, 'getalbums']
 
 # This is for getting artist information
@@ -210,6 +255,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.start", "status": status, "headers": headers})
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
+
     print(body)
     # print()
     # print(f"The text is ... ${body}")

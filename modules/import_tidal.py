@@ -64,21 +64,31 @@ def track_to_dict(track):
     }
 
 # ---------------- Track Endpoint -------------------
-def get_top_tracks(artists, albums=None):
+async def get_top_tracks(artists, albums=None):
     """
     Return tracks for the given artist.
     If album is provided, filter tracks for that album.
     """
-    # return "ARE WE HERE"
-    session = get_session()
-    results = session.search(query=artists,models=[tidalapi.Artist],limit=300)
-    artist = results["artists"][0]
-    tracks = artist.get_top_tracks(limit = 60)
-    # print(tracks)
-    # Make a filter for album if provided
-    return tracks
+    session = get_session() 
+    tracks = []
 
-async def get_favorites(artists=None, albums=None):
+    if isinstance(artists, (str)):
+        artists = [artists]  
+
+    for artist in artists:
+        results = session.search(query=artist, models=[tidalapi.Artist], limit=1)
+        artist_results = results.get("artists", [])
+
+        if not artist_results:
+            continue
+        artist_obj = artist_results[0]
+
+        tracks.extend(artist_obj.get_top_tracks(limit = 60))
+    print(tracks)
+    # Make a filter for album if provided
+    return flatten_track(tracks)
+
+async def get_favorites(artists=None, albums=None, top=None):
     """
     Return favorited tracks that match filter
     If album is provided, filter tracks for that album.
@@ -142,53 +152,54 @@ async def get_tracks(artists): # add an ep flag later
     Return tracks for the given artist.
     """
     session = get_session() 
-    albums = []
-    results = session.search(query=artists, models=[tidalapi.Artist], limit=300)
-    artist = results["artists"][0] # pick the top result as the searchable artist
+    track_list = []
 
-    # below is where you call tidalapi to get lists of album and epsingles
-    album_catalog = artist._get_albums()
-    ep_catalog = artist.get_ep_singles()
+    if isinstance(artists, (str)):
+        artists = [artists]  
 
-    albums.extend(ep_catalog)     
-    albums.extend(album_catalog)
+    for artist in artists:
+        results = session.search(query=artist, models=[tidalapi.Artist], limit=1)
+        artist_results = results.get("artists", [])
 
-    for album in albums:
-        tracks = album.tracks()
+        if not artist_results:
+            continue
 
-        for track in tracks:
-            track_list.append(track)
+        artist_obj = artist_results[0]
 
-    # FLATTEN HERE
-    flattened_tracks = flatten_track(track_list)
+        # below is where you call tidalapi to get lists of album and epsingles
+        # Reset albums per artist
+        albums = []
+        albums.extend(artist_obj.get_ep_singles())
+        albums.extend(artist_obj._get_albums())
 
-    return flattened_tracks
+        # Optional speed cap (VERY impactful)
+        # albums = albums[:10]
+
+        for album in albums:
+            track_list.extend(album.tracks())  # cleaner + faster
+
+    return flatten_track(track_list)
 
 async def get_album_tracks(albums):
     """
     Return tracks for the given album.
     """
     session = get_session()
-    tracks = []
-    track_results = []
-    results = []
-    album_filter = []
+    track_list = []
+
     if isinstance(albums, (str)):
         albums = [albums]
-
+    
     for album in albums:
         results = session.search(query=album, models=[tidalapi.Album], limit=1)
-        # print(results)
-        album_filter = results["albums"]
-        for album in album_filter:
-            print(album.name)
-            tracks = album.tracks()
+        album_results = results.get("albums", [])
 
-            for track in tracks:
-                clean_track = clean_object(track)
-                track_results.append(clean_track)
+        for alb in album_results:
+            for track in alb.tracks():
+                track_list.append(track)
 
-    return track_results
+    return flatten_track(track_list)
+
 
 async def get_albums(artists):
     """
@@ -370,7 +381,6 @@ def flatten_track(data):
     return flattened_result
 
 def get_session():
-
     """
     Return a logged-in Tidal session, creating it if needed.
     Cached globally for reuse across requests.
@@ -412,8 +422,9 @@ def get_session():
 # print(len(top_tracks))
 # albums = get_albums("Radiohead")
 # album_tracks = get_album_tracks(["OK COmput","In R"])
-# print(f"Number of Albums: {len(albums)}")
-# print(album_tracks)
+# print(f"Number of Tracks: {len(album_tracks)}")
+# for album in album_tracks:
+#     print(album["track"]["full_name"])
 # tracks = get_tracks("Radiohead")
 # print(len(album_tracks))
 # print(f"Number of Tracks: {len(tracks)}")
