@@ -59,24 +59,129 @@ def get_session():
 # ==============================================
 # Pure transformation functions (input → output)
 
+def sort_by_popularity(items):
+    """
+    Sort items by popularity using get_popularity.
+    """
+
+    if not items:
+        return []
+
+    sorted_items = sorted(
+        items,
+        key=get_popularity,
+        reverse=True
+    )
+
+    return sorted_items
+
+def sort_albums_by_popularity(albums):
+    return sorted(
+        albums,
+        key=get_album_popularity,
+        reverse=True
+    )
 
 # ----------------------------------------------
 #  POPULARITY LIMITING
 # ----------------------------------------------
-def limit_by_popularity(tracks, limit=20):
-    if not tracks:
+def limit_results(items, limit=None):
+    """
+    Limit results to top N items.
+    """
+
+    if not items:
         return []
 
-    def get_popularity(t):
-        if hasattr(t, "popularity"):
-            return t.popularity or 0
-        elif isinstance(t, dict):
-            return t.get("track", {}).get("popularity", 0)
+    if limit is None:
+        return items
+
+    limited_items = items[:limit]
+
+    return limited_items
+
+def get_popularity(item):
+    """
+    Return popularity score from a flattened track.
+    """
+    track = item.get("track", {})
+
+    if not track:
         return 0
 
-    sorted_tracks = sorted(tracks, key=get_popularity, reverse=True)
-    return sorted_tracks[:limit] if limit else sorted_tracks
+    popularity = track.get("popularity", 0)
 
+    return popularity
+
+def compute_artist_popularity(tracks):
+    """
+    Compute average popularity for an artist from track list.
+    """
+
+    if not tracks:
+        return 0
+
+    total = 0
+    count = 0
+
+    for track in tracks:
+        popularity = get_popularity(track)
+
+        if popularity > 0:
+            total += popularity
+            count += 1
+
+    if count == 0:
+        return 0
+
+    average = total / count
+
+    return average
+
+def compute_album_popularity(tracks):
+    """
+    Compute average popularity for an album from track list.
+    """
+
+    if not tracks:
+        return 0
+
+    total = 0
+    count = 0
+
+    for track in tracks:
+        popularity = get_popularity(track)
+
+        if popularity > 0:
+            total += popularity
+            count += 1
+
+    if count == 0:
+        return 0
+
+    average = total / count
+
+    return average
+
+def build_albums_from_tracks(tracks):
+    album_map = {}
+
+    for track in tracks:
+        album = track.get("album", {})
+        album_id = album.get("id")
+
+        if not album_id:
+            continue
+
+        if album_id not in album_map:
+            album_map[album_id] = {
+                "album": album,
+                "tracks": []
+            }
+
+        album_map[album_id]["tracks"].append(track)
+
+    return list(album_map.values())
 
 # ==============================================
 #  FETCH LAYER (EXTERNAL DATA RETRIEVAL)
@@ -108,7 +213,7 @@ async def get_playlists(session):
 # ----------------------------------------------
 #  TRACK FETCH (FAST PATH - TOP TRACKS)
 # ----------------------------------------------
-async def get_top_tracks(artists, albums=None):
+async def get_top_tracks(artists, albums=None, limit=15):
     session = get_session()
     tracks = []
 
@@ -123,15 +228,15 @@ async def get_top_tracks(artists, albums=None):
             continue
 
         artist_obj = artist_results[0]
-        tracks.extend(artist_obj.get_top_tracks(limit=60))
+        tracks.extend(artist_obj.get_top_tracks(limit=limit))
 
-    return flatten_track(tracks)
+    return flatten_track(tracks)[:15]
 
 
 # ----------------------------------------------
 #  TRACK FETCH (FULL DISCOGRAPHY)
 # ----------------------------------------------
-async def get_tracks(artists, top=None):
+async def get_tracks(artists, top, limit):
     session = get_session()
     track_list = []
 
@@ -154,10 +259,14 @@ async def get_tracks(artists, top=None):
         for album in albums:
             track_list.extend(album.tracks())
 
-    if top:
-        track_list = limit_by_popularity(track_list, top)
+    # ---------------- PIPELINE ----------------
 
-    return flatten_track(track_list)
+    tracks = flatten_track(track_list)
+    tracks = sort_by_popularity(tracks)
+    if top:
+        tracks = limit_results(tracks, limit)
+
+    return tracks
 
 
 # ----------------------------------------------
@@ -216,7 +325,16 @@ async def get_favorites(artists=None, albums=None, top=None):
         if match:
             filtered_tracks.append(favorite)
 
-    return flatten_track(filtered_tracks)
+    # ---------------- PIPELINE ----------------
+
+    tracks = flatten_track(filtered_tracks)
+
+    tracks = sort_by_popularity(tracks)
+
+    if top:
+        tracks = limit_results(tracks, 50)
+
+    return tracks
 
 
 # ----------------------------------------------
@@ -384,3 +502,7 @@ def track_to_dict(track):
         "artist": getattr(track.artist, "name", ""),
         "popularity": getattr(track, "popularity", 0),
     }
+
+
+# tracks = get_tracks(artists="Radiohead", top='N')
+# print(tracks)

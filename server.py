@@ -163,23 +163,28 @@ async def track_handler(params):
     artist = parameter_splitter(params.get("artist"))
     album = parameter_splitter(params.get("album"))
     track = parameter_splitter(params.get("track"))
-    top = params.get("top")
+    if params.get("top"):
+        top = True
+        limit = 50
+    else:
+        top= False
+        limit=100
     # return {"handler": "artist_handler", "artist": params.get("artist")}
     print(f"artist: {artist}, album: {album}, track {track}, top: {top}")
     start = time.perf_counter()
     try:
-        if top[0] == 'Y':
-            tracks = await get_top_tracks(artist)
+        if top:
+            tracks = await get_top_tracks(artist, album, limit)
         else:
             if not artist and album:
                 # print("albums")
                 tracks = await get_album_tracks(album)
             elif artist:
                 # print("artist")
-                tracks = await get_tracks(artist)
+                tracks = await get_tracks(artist,top,limit)
             elif track:
                 # print("track")
-                tracks = await get_tracks(track)
+                tracks = await get_tracks(track,top,limit)
             else:
                 tracks = []
             
