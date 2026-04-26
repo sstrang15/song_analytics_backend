@@ -177,13 +177,14 @@ async def track_handler(params):
             tracks = await get_top_tracks(artist, album, limit)
         else:
             if not artist and album:
-                # print("albums")
+                print("albums")
                 tracks = await get_album_tracks(album)
             elif artist:
-                # print("artist")
-                tracks = await get_tracks(artist,top,limit)
+                print("artist")
+                tracks = await get_tracks(artist,True,limit)
+                print(tracks)
             elif track:
-                # print("track")
+                print("track")
                 tracks = await get_tracks(track,top,limit)
             else:
                 tracks = []
@@ -261,7 +262,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
 
-    print(body)
+    # print(body)
     # print()
     # print(f"The text is ... ${body}")
 

@@ -59,21 +59,38 @@ def get_session():
 # ==============================================
 # Pure transformation functions (input → output)
 
-def sort_by_popularity(items):
+def get_value(item, path):
     """
-    Sort items by popularity using get_popularity.
+    path = "track.popularity"
+    """
+    keys = path.split(".")
+    value = item
+
+    for key in keys:
+        if isinstance(value, dict):
+            value = value.get(key)
+        else:
+            return None
+
+    return value
+
+def sort_items(items, fields, descending=True):
+    """
+    fields = ["track.popularity", "album.release_date"]
     """
 
-    if not items:
-        return []
+    def key_func(item):
+        result = []
 
-    sorted_items = sorted(
-        items,
-        key=get_popularity,
-        reverse=True
-    )
+        for field, direction in fields:
+            val = get_value(item, field)
+            val = normalize(val)
+            val = apply_direction(val, direction)
+            result.append(val)
 
-    return sorted_items
+        return tuple(result)
+
+    return sorted(items, key=key_func)
 
 def sort_albums_by_popularity(albums):
     return sorted(
@@ -236,7 +253,7 @@ async def get_top_tracks(artists, albums=None, limit=15):
 # ----------------------------------------------
 #  TRACK FETCH (FULL DISCOGRAPHY)
 # ----------------------------------------------
-async def get_tracks(artists, top, limit):
+async def get_tracks(artists, top, limit, sort_fields=None):
     session = get_session()
     track_list = []
 
@@ -253,7 +270,7 @@ async def get_tracks(artists, top, limit):
         artist_obj = artist_results[0]
 
         albums = []
-        albums.extend(artist_obj.get_ep_singles())
+        # albums.extend(artist_obj.get_ep_singles())
         albums.extend(artist_obj._get_albums())
 
         for album in albums:
@@ -262,8 +279,23 @@ async def get_tracks(artists, top, limit):
     # ---------------- PIPELINE ----------------
 
     tracks = flatten_track(track_list)
-    tracks = sort_by_popularity(tracks)
+
+    # -------- sorting logic --------
     if top:
+        # force popularity sort if requesting top tracks
+        sort_fields = [("track.popularity", "desc")]
+    elif not sort_fields:
+        # default behavior
+        sort_fields = [
+            ("album.release_date", "desc"),
+            ("track.track_num", "asc")
+        ]
+
+
+    tracks = sort_items(tracks, sort_fields)
+
+    # limiting
+    if limit:
         tracks = limit_results(tracks, limit)
 
     return tracks
@@ -297,6 +329,7 @@ async def get_favorites(artists=None, albums=None, top=None):
     favorites = session.user.favorites.tracks(limit=600)
     filtered_tracks = []
 
+    # normalize inputs
     if isinstance(artists, str):
         artists = [artists]
 
@@ -306,6 +339,7 @@ async def get_favorites(artists=None, albums=None, top=None):
     artists = [a.lower().strip() for a in artists] if artists else []
     albums = [a.lower().strip() for a in albums] if albums else []
 
+    # -------- FILTERING --------
     for favorite in favorites:
         track_artist = favorite.artist.name.lower().strip()
         track_album = favorite.album.name.lower().strip()
@@ -325,14 +359,17 @@ async def get_favorites(artists=None, albums=None, top=None):
         if match:
             filtered_tracks.append(favorite)
 
-    # ---------------- PIPELINE ----------------
+    # -------- PIPELINE --------
 
     tracks = flatten_track(filtered_tracks)
 
-    tracks = sort_by_popularity(tracks)
+    # sort by popularity (desc)
+    sort_fields = [("track.popularity", "desc")]
+    tracks = sort_items(tracks, sort_fields)
 
-    if top:
-        tracks = limit_results(tracks, 50)
+    # limit results if requested
+    # if top:
+    #     tracks = limit_results(tracks, top)
 
     return tracks
 
@@ -408,80 +445,141 @@ async def get_artist_bytrack(tracks):
 #  TRACK FLATTENING
 # ----------------------------------------------
 def flatten_track(data):
+    """
+    Flatten Tidal track objects into:
+
+    {
+        "track": {...},
+        "album": {...},
+        "artist": {...}
+    }
+
+    Rules:
+    - 1 level deep only
+    - primitives + datetime only
+    - skip nested objects / relationships
+    """
+
     master_tracks = []
+
     ENTITY_KEYS = {"artist", "album"}
+    SKIP_KEYS = {"session", "request"}
 
     for track in data:
         parent_key = type(track).__name__.lower()
         compiled_tracks = []
 
+        # -------- TRACK LEVEL --------
         for p_key, p_value in track.__dict__.items():
+            # DEBUG: track level
+            # print(f"[TRACK] {p_key} → {type(p_value)}")
+            if p_key in SKIP_KEYS:
+                continue
 
+            # ---- CASE 1: list ----
             if isinstance(p_value, list):
+
+                # print(f"🔍 TRACK LIST: {p_key}")
+                # skip lists of objects (relationships)
+                if any(hasattr(v, "__dict__") for v in p_value):
+                    # print(f"⛔ SKIPPING TRACK OBJECT LIST: {p_key}")
+                    continue
+
                 simple = all(
                     isinstance(v, (str, int, float, bool, dict, datetime.datetime)) or v is None
                     for v in p_value
                 )
 
                 if simple:
-                    normalized = normalize_value(p_value)
-                    if normalized is not None:
-                        compiled_tracks.append({parent_key: {p_key: normalized}})
-                else:
-                    for obj in p_value:
-                        if hasattr(obj, "__dict__"):
-                            child_key = type(obj).__name__.lower()
-                            if child_key in ENTITY_KEYS:
-                                for c_key, c_value in obj.__dict__.items():
-                                    normalized = normalize_value(c_value)
-                                    if normalized is not None:
-                                        compiled_tracks.append({child_key: {c_key: normalized}})
-
-            elif hasattr(p_value, "__dict__"):
-                child_key = type(p_value).__name__.lower()
-                if child_key in ENTITY_KEYS:
-                    for c_key, c_value in p_value.__dict__.items():
-                        normalized = normalize_value(c_value)
-                        if normalized is not None:
-                            compiled_tracks.append({child_key: {c_key: normalized}})
-
-            else:
-                normalized = normalize_value(p_value)
-                if normalized is not None:
+                    normalized = [normalize(v) for v in p_value]
                     compiled_tracks.append({parent_key: {p_key: normalized}})
 
-        master_tracks.append(compiled_tracks)
+                continue
 
-    flattened_result = []
+            # ---- CASE 2: nested object (album / artist) ----
+            elif hasattr(p_value, "__dict__"):
 
-    for track_fragments in master_tracks:
+                child_key = type(p_value).__name__.lower()
+
+                if child_key not in ENTITY_KEYS:
+                    continue
+
+                for c_key, c_value in p_value.__dict__.items():
+
+                    if c_key in SKIP_KEYS:
+                        continue
+
+                    # ---- list inside nested object ----
+                    if isinstance(c_value, list):
+
+                        # skip relationship lists (e.g. artists)
+                        if any(hasattr(v, "__dict__") for v in c_value):
+
+                            # TODO: handle nested entities later (album.artists)
+                            continue
+
+                        simple = all(
+                            isinstance(v, (str, int, float, bool, dict, datetime.datetime)) or v is None
+                            for v in c_value
+                        )
+
+                        if simple:
+                            normalized = [normalize(v) for v in c_value]
+                            compiled_tracks.append({child_key: {c_key: normalized}})
+
+                        continue
+
+                    # ---- skip deeper objects ----
+                    if hasattr(c_value, "__dict__"):
+                        continue
+
+                    # ---- primitive ----
+                    normalized = normalize(c_value)
+                    compiled_tracks.append({child_key: {c_key: normalized}})
+
+            # ---- CASE 3: primitive ----
+            else:
+                normalized = normalize(p_value)
+                compiled_tracks.append({parent_key: {p_key: normalized}})
+
+        # -------- MERGE --------
         track_result = {}
-        for fragment in track_fragments:
-            for parent_key, inner in fragment.items():
-                if parent_key not in track_result:
-                    track_result[parent_key] = {}
-                track_result[parent_key].update(inner)
-        flattened_result.append(track_result)
 
-    return flattened_result
+        for fragment in compiled_tracks:
+            for key, inner in fragment.items():
+                if key not in track_result:
+                    track_result[key] = {}
+                track_result[key].update(inner)
 
+        master_tracks.append(track_result)
+
+    return master_tracks
 
 # ----------------------------------------------
 #  VALUE NORMALIZATION
 # ----------------------------------------------
-def normalize_value(value):
-    if isinstance(value, list) and len(value) == 1:
-        value = value[0]
 
-    if isinstance(value, (str, int, float, bool, dict)) or value is None:
-        return value
+def normalize(val):
+    if val is None:
+        return 0
 
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
+    # datetime → string (API safe)
+    if isinstance(val, datetime.datetime):
+        return val.isoformat()
 
-    return None
+    # leave strings as-is
+    if isinstance(val, str):
+        return val
 
+    return val
 
+def apply_direction(val, direction):
+    if direction == "desc":
+        if isinstance(val, (int, float)):
+            return -val
+        if isinstance(val, datetime.datetime):
+            return -val.toordinal()
+    return val
 # ----------------------------------------------
 #  OBJECT CLEANING
 # ----------------------------------------------
@@ -504,5 +602,19 @@ def track_to_dict(track):
     }
 
 
-# tracks = get_tracks(artists="Radiohead", top='N')
-# print(tracks)
+# tracks = get_tracks(["Radiohead"], top=False, limit=False)
+
+# for track in tracks:
+
+    # 🔍 DEBUG STRUCTURE
+    # print("TRACK KEYS:", track.keys())
+    # print("ALBUM KEYS:", track.get("album", {}).keys())
+
+    # existing print
+    # print(
+    #     f"{track['album'].get('name')} is album and "
+    #     f"{track['track'].get('name')} is song, "
+    #     f"{track['track'].get('track_num')}"
+    # )
+
+    # print("-" * 40)
