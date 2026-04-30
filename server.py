@@ -153,7 +153,10 @@ async def favorites_handler(params):
     end = time.perf_counter()
     print(f"[TIMER] took {end - start:.3f}s")
     # print(f"tracks are {tracks}")
-    return [tracks, 'getfavorites']
+    return {
+        "id": "getfavorites",
+        "data": tracks["data"] if isinstance(tracks, dict) else tracks
+    }
 
 # This is for getting tracks and track information
 async def track_handler(params): 
@@ -195,7 +198,10 @@ async def track_handler(params):
     end = time.perf_counter()
     print(f"[TIMER] took {end - start:.3f}s")
     # print(f"tracks are {tracks}")
-    return [tracks, 'gettracks']
+    return {
+        "id": "gettracks",
+        "data": tracks["data"] if isinstance(tracks, dict) else tracks
+    }
 
 # This is for getting albums and album information
 async def album_handler(params):
@@ -217,7 +223,10 @@ async def album_handler(params):
         albums = []
     end = time.perf_counter()
     print(f"[TIMER] took {end - start:.3f}s")
-    return [albums, 'getalbums']
+    return {
+        "id": "getalbums",
+        "data": albums["data"] if isinstance(albums, dict) else albums
+    }
 
 # This is for getting artist information
 async def artist_handler(params):
@@ -243,8 +252,11 @@ async def artist_handler(params):
         print("Error in getartist:", e)
         artists = []
 
-    print(artists)
-    return [artists, 'getartist']
+    return {
+        "id": "getartist",
+        "data": artists   # always use "data" unless you explicitly return buckets
+    }
+
 
 # ==============================================
 # 📤 RESPONSE SENDER (DO NOT CHANGE)
