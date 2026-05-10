@@ -177,6 +177,7 @@ async def track_handler(params):
     start = time.perf_counter()
     try:
         if top:
+            print("Top")
             tracks = await get_top_tracks(artist, album, limit)
         else:
             if not artist and album:
@@ -185,7 +186,6 @@ async def track_handler(params):
             elif artist:
                 print("artist")
                 tracks = await get_tracks(artist,True,limit)
-                print(tracks)
             elif track:
                 print("track")
                 tracks = await get_tracks(track,top,limit)
@@ -200,7 +200,9 @@ async def track_handler(params):
     # print(f"tracks are {tracks}")
     return {
         "id": "gettracks",
-        "data": tracks["data"] if isinstance(tracks, dict) else tracks
+        "data": tracks["data"] if isinstance(tracks, dict) else tracks,
+    #     "album_images": tracks["album_images"],
+    #     "artist_images": tracks["artist_images"]
     }
 
 # This is for getting albums and album information
@@ -274,7 +276,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
 
-    # print(body)
+    print(body)
     # print()
     # print(f"The text is ... ${body}")
 
