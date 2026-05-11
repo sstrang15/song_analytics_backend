@@ -231,147 +231,204 @@ async def get_playlists(session):
 #  TRACK FETCH (FAST PATH - TOP TRACKS)
 # ----------------------------------------------
 async def get_top_tracks(
-    artists, 
-    albums=None, 
-    limit=15,     
-    sort_fields=None,
-    buckets=False,
-):
-    session = get_session()
-    tracks = []
-
-    if isinstance(artists, str):
-        artists = [artists]
-
-    for artist in artists:
-        results = session.search(query=artist, models=[tidalapi.Artist], limit=1)
-        artist_results = results.get("artists", [])
-
-        if not artist_results:
-            continue
-
-        artist_obj = artist_results[0]
-        tracks.extend(artist_obj.get_top_tracks(limit=limit))
-
-    tracks = flatten_track(tracks)
-
-    # if top:
-    #     sort_fields = [("track.popularity", "desc")]
-    # elif not sort_fields:
-    #     sort_fields = [
-    #         ("album.release_date", "desc"),
-    #         ("track.track_num", "asc")
-    #     ]
-
-    # tracks = sort_items(tracks, sort_fields)
-
-    # -------- LIMIT --------
-    # if isinstance(limit, int):
-    #     tracks = limit_results(tracks, limit)
-
-    # -------- BUCKET --------
-    if buckets:
-        return {
-            "buckets": build_buckets(tracks)
-            # "album_images": alb_images,
-            # "artist_images": art_images
-        }
-
-    # -------- DEFAULT RETURN --------
-    return {
-        "data": tracks
-        # "album_images": alb_images,
-        # "artist_images": art_images
-    }
-
-
-# ----------------------------------------------
-def get_tracks(
     artists,
-    top,
-    limit,
+    albums=None,
+    limit=15,
     sort_fields=None,
-    buckets=True,
-    mode="all"
+    collections=False,
 ):
     session = get_session()
-    track_list = []
-    alb_images = []
-    art_images = []
+
+    raw_tracks = []
+
     if isinstance(artists, str):
         artists = [artists]
 
     # -------- FETCH --------
     for artist in artists:
-        results = session.search(query=artist, models=[tidalapi.Artist], limit=1)
+
+        results = session.search(
+            query=artist,
+            models=[tidalapi.Artist],
+            limit=1
+        )
+
         artist_results = results.get("artists", [])
 
         if not artist_results:
             continue
 
         artist_obj = artist_results[0]
+
+        raw_tracks.extend(
+            artist_obj.get_top_tracks(limit=limit)
+        )
+
+    # -------- FLATTEN --------
+    tracks = flatten_track(raw_tracks)
+
+    # -------- OPTIONAL DERIVED COLLECTIONS --------
+    if collections:
+
+        derived = build_collections(tracks)
+
+        return {
+            "tracks": tracks,
+            "albums": derived["albums"],
+            "eps": derived["eps"],
+            "artists": derived["artists"]
+        }
+
+    # -------- DEFAULT RETURN --------
+    return {
+        "tracks": tracks
+    }
+
+# -------- TRACK DATASET PIPELINE --------
+# fetch → flatten → sort → derive collections → attach assets
+def get_tracks(
+    artists,
+    top,
+    limit,
+    sort_fields=None,
+    collections=True,
+    mode="all"
+):
+    """
+    Fetch and structure artist track data into a frontend-ready music dataset.
+
+    Flow:
+    - fetch albums / eps from artist
+    - collect raw track objects
+    - flatten relational data
+    - optionally derive collections
+    - attach render assets
+
+    Returns:
+    {
+        "tracks": [...],
+        "albums": [...],
+        "eps": [...],
+        "artists": [...],
+
+        "assets": {
+            "album_images": [...],
+            "artist_images": [...]
+        }
+    }
+
+    Notes:
+    - tracks are the canonical relational dataset
+    - albums / eps / artists are derived collections
+    - assets support frontend rendering
+    """
+    session = get_session()
+
+    raw_tracks = []
+
+    alb_images = []
+    art_images = []
+
+    if isinstance(artists, str):
+        artists = [artists]
+
+    # -------- FETCH --------
+    for artist in artists:
+
+        results = session.search(
+            query=artist,
+            models=[tidalapi.Artist],
+            limit=1
+        )
+
+        artist_results = results.get("artists", [])
+
+        if not artist_results:
+            continue
+
+        artist_obj = artist_results[0]
+
         albums = []
 
         if mode == "albums":
+
             albums.extend(artist_obj._get_albums())
 
         elif mode == "eps":
+
             albums.extend(artist_obj.get_ep_singles())
 
         else:
+
             albums.extend(artist_obj._get_albums())
             albums.extend(artist_obj.get_ep_singles())
 
         for album in albums:
+
             alb_images.append(album.image(160))
             art_images.append(artist_obj.image(160))
-            track_list.extend(album.tracks())
 
-    # -------- PIPELINE --------
-    tracks = flatten_track(track_list)
+            raw_tracks.extend(album.tracks())
+
+    # -------- FLATTEN --------
+    tracks = flatten_track(raw_tracks)
 
     # -------- SORTING --------
     if top:
-        sort_fields = [("track.popularity", "desc")]
+
+        sort_fields = [
+            ("track.popularity", "desc")
+        ]
+
     elif not sort_fields:
+
         sort_fields = [
             ("album.release_date", "desc"),
             ("track.track_num", "asc")
         ]
 
-    tracks = sort_items(tracks, sort_fields)
+    tracks = sort_items(
+        tracks,
+        sort_fields
+    )
 
-    # -------- LIMIT --------
-    # if isinstance(limit, int):
-    #     tracks = limit_results(tracks, limit)
+    # -------- DERIVED COLLECTIONS --------
+    if collections:
 
-    # -------- BUCKET --------
-    if buckets:
-        print("Buckets were built")
+        derived = build_collections(tracks)
+
         return {
-            "buckets": build_buckets(tracks),
-            "album_images": alb_images,
-            "artist_images": art_images
+            "tracks": tracks,
+            "albums": derived["albums"],
+            "eps": derived["eps"],
+            "artists": derived["artists"],
+
+            "assets": {
+                "album_images": alb_images,
+                "artist_images": art_images
+            }
         }
 
     # -------- DEFAULT RETURN --------
     return {
-        "data": tracks,
-        "album_images": alb_images,
-        "artist_images": art_images
-    }
-# tracks = flatten_track(...)
-# bucketed = build_buckets(tracks)
+        "tracks": tracks,
 
-# return {
-#     "id": "gettracks",
-#     "data": bucketed
-# }
+        "assets": {
+            "album_images": alb_images,
+            "artist_images": art_images
+        }
+    }
 # ----------------------------------------------
 #  TRACK FETCH (ALBUM-LEVEL)
 # ----------------------------------------------
-async def get_album_tracks(albums, top=None, sort_fields=None, buckets=False):
+async def get_album_tracks(
+    albums,
+    top=None,
+    sort_fields=None,
+    collections=False
+):
     session = get_session()
+
     track_list = []
 
     if isinstance(albums, str):
@@ -379,55 +436,109 @@ async def get_album_tracks(albums, top=None, sort_fields=None, buckets=False):
 
     # -------- FETCH --------
     for album in albums:
-        results = session.search(query=album, models=[tidalapi.Album], limit=1)
+
+        results = session.search(
+            query=album,
+            models=[tidalapi.Album],
+            limit=1
+        )
+
         album_results = results.get("albums", [])
 
         for alb in album_results:
             track_list.extend(alb.tracks())
 
-    # -------- PIPELINE --------
+    # -------- FLATTEN --------
     tracks = flatten_track(track_list)
 
+    # -------- SORTING --------
     if top:
-        sort_fields = [("track.popularity", "desc")]
+
+        sort_fields = [
+            ("track.popularity", "desc")
+        ]
+
     elif not sort_fields:
+
         sort_fields = [
             ("album.release_date", "desc"),
             ("track.track_num", "asc")
         ]
 
-    tracks = sort_items(tracks, sort_fields)
+    tracks = sort_items(
+        tracks,
+        sort_fields
+    )
 
+    # -------- LIMIT --------
     if top and isinstance(top, int):
         tracks = limit_results(tracks, top)
 
-    if buckets:
-        return {"buckets": build_buckets(tracks)}
+    # -------- DERIVED COLLECTIONS --------
+    if collections:
 
-    return {"data": tracks}
+        derived = build_collections(tracks)
+
+        return {
+            "tracks": tracks,
+            "albums": derived["albums"],
+            "eps": derived["eps"],
+            "artists": derived["artists"]
+        }
+
+    # -------- DEFAULT RETURN --------
+    return {
+        "tracks": tracks
+    }
 
 # ----------------------------------------------
 #  USER DATA FETCH (FAVORITES FILTER)
 # ----------------------------------------------
-async def get_favorites(artists=None, albums=None, top=None, buckets=False):
+async def get_favorites(
+    artists=None,
+    albums=None,
+    top=None,
+    collections=False
+):
     session = get_session()
+
     favorites = session.user.favorites.tracks(limit=600)
 
     # filtering unchanged...
 
-    # -------- PIPELINE --------
+    # -------- FLATTEN --------
     tracks = flatten_track(favorites)
 
-    sort_fields = [("track.popularity", "desc")]
-    tracks = sort_items(tracks, sort_fields)
+    # -------- SORTING --------
+    sort_fields = [
+        ("track.popularity", "desc")
+    ]
 
+    tracks = sort_items(
+        tracks,
+        sort_fields
+    )
+
+    # -------- LIMIT --------
     if top and isinstance(top, int):
         tracks = limit_results(tracks, top)
 
-    if buckets:
-        return {"buckets": build_buckets(tracks)}
+    # -------- DERIVED COLLECTIONS --------
+    if collections:
 
-    return {"data": tracks}
+        derived = build_collections(tracks)
+
+        return {
+            "tracks": tracks,
+            "albums": derived["albums"],
+            "eps": derived["eps"],
+            "artists": derived["artists"]
+        }
+
+    # -------- DEFAULT RETURN --------
+    return {
+        "tracks": tracks
+    }
 
 
 # ----------------------------------------------
@@ -493,30 +604,33 @@ async def get_artist_bytrack(tracks):
 # ==============================================
 
 
+
 # ----------------------------------------------
 #  TRACK FLATTENING
 # ----------------------------------------------
 def flatten_track(data):
     """
-    Flatten Tidal track objects into:
+    Flatten Tidal track objects into pure entity-friendly track objects.
 
+    Track output:
     {
-        "track": {...},
-        "album": {...},
-        "artist": {...}
+        "id": ...,
+        "name": ...,
+        "album_id": ...,
+        "artist_id": ...
     }
 
     Core idea:
     - walk through track object
     - inspect every field
-    - convert acceptable values into small fragments
-    - merge all fragments into final structured row
+    - flatten only track-level primitives
+    - preserve relational ids
+    - skip deep relationship objects
 
-    Relationship handling:
-    - preserve album / artist objects separately
-    - additionally inject:
-        track.album_id
-        track.artist_id
+    Important distinction:
+    - tracks become pure track entities
+    - album / artist objects are NOT embedded into tracks
+    - collections are built separately later
 
     Rules:
     - 1 level deep only
@@ -524,218 +638,311 @@ def flatten_track(data):
     - skip deep relationship objects
     """
 
-    master_tracks = []
+    master_data = []
 
-    ENTITY_KEYS = {"artist", "album"}
-    SKIP_KEYS = {"session", "request"}
+    ENTITY_KEYS = {
+        "album",
+        "artist"
+    }
 
-    PRIMITIVE_TYPES = (str, int, float, bool, dict, datetime.datetime, type(None))
+    SKIP_KEYS = {
+        "session",
+        "request"
+    }
+
+    PRIMITIVE_TYPES = (
+        str,
+        int,
+        float,
+        bool,
+        dict,
+        datetime.datetime,
+        type(None)
+    )
 
     for track in data:
 
-        # determines top-level namespace ("track")
+        composed_data = {
+            "track": {},
+            "album": {},
+            "artist": {}
+        }
+
+        compiled_fragments = []
+
+        # ---------------------------------
+        # RELATIONSHIP STORAGE
+        # ---------------------------------
+        track_album_id = None
+        track_artist_id = None
+        album_artist_id = None
+
+        # ---------------------------------
+        # HEAD ENTITY
+        # ---------------------------------
         head_key = type(track).__name__.lower()
 
-        # temporary fragment storage before merge
-        compiled_tracks = []
-
-        # -------- TRACK LEVEL --------
-        # Walk every field attached directly to track object
+        # ---------------------------------
+        # WALK HEAD ENTITY
+        # ---------------------------------
         for field_name, field_value in track.__dict__.items():
-
-            # DEBUG: track level
-            # print(f"[TRACK] {field_name} → {type(field_value)}")
 
             if field_name in SKIP_KEYS:
                 continue
 
-            # ---- CASE 1: list ----
-            # Example: track.audio_modes = ["STEREO"]
-            if isinstance(field_value, list):
+            # ---------------------------------
+            # PRIMITIVE
+            # ---------------------------------
+            if isinstance(
+                field_value,
+                PRIMITIVE_TYPES
+            ):
+                compiled_fragments.append({
+                    head_key: {
+                        field_name:
+                            normalize(field_value)
+                    }
+                })
 
-                # skip lists containing relationship objects
-                # Example: track.artists = [Artist(), Artist()]
-                if field_value and not isinstance(field_value[0], PRIMITIVE_TYPES):
-                    continue
+            # ---------------------------------
+            # LIST
+            # ---------------------------------
+            elif isinstance(field_value, list):
 
-                # IMPORTANT FRAGMENT CREATION POINT #1
-                # Creates:
-                # {
-                #   "track": {
-                #       "audio_modes": [...]
-                #   }
-                # }
-                if not field_value or isinstance(field_value[0], PRIMITIVE_TYPES):
-
-                    normal_value = [normalize(v) for v in field_value]
-
-                    compiled_tracks.append({
+                # ---------------------------------
+                # LIST OF PRIMITIVES
+                # ---------------------------------
+                if (
+                    not field_value or
+                    isinstance(
+                        field_value[0],
+                        PRIMITIVE_TYPES
+                    )
+                ):
+                    compiled_fragments.append({
                         head_key: {
-                            field_name: normal_value
+                            field_name: [
+                                normalize(v)
+                                for v in field_value
+                            ]
                         }
                     })
 
-                continue
+                # ---------------------------------
+                # LIST OF OBJECTS
+                # ---------------------------------
+                else:
 
-            # ---- CASE 2: nested object (album / artist) ----
-            # Example: track.album / track.artist
+                    # FUTURE:
+                    # track.artists
+                    # contributors
+                    # collaboration graphs
+                    pass
+
+            # ---------------------------------
+            # NESTED OBJECT
+            # ---------------------------------
             elif hasattr(field_value, "__dict__"):
 
-                child_key = type(field_value).__name__.lower()
+                child_key = (
+                    type(field_value)
+                    .__name__
+                    .lower()
+                )
 
-                # only flatten approved nested entities
                 if child_key not in ENTITY_KEYS:
                     continue
 
-                # Walk fields INSIDE album / artist
-                for child_field, child_value in field_value.__dict__.items():
+                # ---------------------------------
+                # WALK CHILD ENTITY
+                # ---------------------------------
+                for child_field, child_value in (
+                    field_value.__dict__.items()
+                ):
 
                     if child_field in SKIP_KEYS:
                         continue
 
-                    # ---- list inside nested object ----
-                    # Example: album.audio_modes = [...]
-                    if isinstance(child_value, list):
-
-                        # skip relationship lists
-                        # Example: album.artists = [Artist()]
-                        if child_value and not isinstance(child_value[0], PRIMITIVE_TYPES):
-                            continue
-
-                        # IMPORTANT FRAGMENT CREATION POINT #2
-                        # Creates:
-                        # {
-                        #   "album": {
-                        #       "audio_modes": [...]
-                        #   }
-                        # }
-                        if not child_value or isinstance(child_value[0], PRIMITIVE_TYPES):
-
-                            normal_value = [normalize(v) for v in child_value]
-
-                            compiled_tracks.append({
-                                child_key: {
-                                    child_field: normal_value
-                                }
-                            })
-
+                    if not isinstance(
+                        child_value,
+                        PRIMITIVE_TYPES
+                    ):
                         continue
 
-                    # ---- skip deeper objects ----
-                    # Example: album.artist / artist.session
-                    if hasattr(child_value, "__dict__"):
-                        continue
-
-                    # ---- primitive ----
-                    # IMPORTANT FRAGMENT CREATION POINT #3
-                    #
-                    # Creates:
-                    # {
-                    #   "artist": {
-                    #       "name": "Radiohead"
-                    #   }
-                    # }
-                    #
-                    # Also copies:
-                    # {
-                    #   "track": {
-                    #       "artist_id": 123
-                    #   }
-                    # }
-
-                    normal_value = normalize(child_value)
-
-                    # preserve original fragment
-                    compiled_tracks.append({
+                    compiled_fragments.append({
                         child_key: {
-                            child_field: normal_value
+                            child_field:
+                                normalize(child_value)
                         }
                     })
 
-                    # additionally copy relationship ids onto track
-                    if child_field == "id":
+                # ---------------------------------
+                # RELATIONSHIPS
+                # ---------------------------------
 
-                        compiled_tracks.append({
-                            "track": {
-                                f"{child_key}_id": normal_value
-                            }
-                        })
+                # TRACK → ALBUM
+                if child_key == "album":
 
-            # ---- CASE 3: primitive ----
-            # Example: track.name / track.duration
-            else:
+                    track_album_id = getattr(
+                        field_value,
+                        "id",
+                        None
+                    )
 
-                normal_value = normalize(field_value)
+                    embedded_artist = getattr(
+                        field_value,
+                        "artist",
+                        None
+                    )
 
-                compiled_tracks.append({
-                    head_key: {
-                        field_name: normal_value
-                    }
-                })
+                    if embedded_artist:
 
-        # -------- MERGE --------
-        # Combine all fragments into:
-        #
-        # {
-        #   "track": {...},
-        #   "album": {...},
-        #   "artist": {...}
-        # }
+                        album_artist_id = getattr(
+                            embedded_artist,
+                            "id",
+                            None
+                        )
 
-        track_result = {}
+                # TRACK → ARTIST
+                elif child_key == "artist":
 
-        for fragment in compiled_tracks:
+                    track_artist_id = getattr(
+                        field_value,
+                        "id",
+                        None
+                    )
 
-            for key, inner in fragment.items():
+        # ---------------------------------
+        # SYNTHESIZED RELATIONSHIPS
+        # ---------------------------------
 
-                if key not in track_result:
-                    track_result[key] = {}
+        if track_album_id:
+            compiled_fragments.append({
+                "track": {
+                    "album_id":
+                        track_album_id
+                }
+            })
 
-                track_result[key].update(inner)
+        if track_artist_id:
+            compiled_fragments.append({
+                "track": {
+                    "artist_id":
+                        track_artist_id
+                }
+            })
 
-        master_tracks.append(track_result)
+        if album_artist_id:
+            compiled_fragments.append({
+                "album": {
+                    "artist_id":
+                        album_artist_id
+                }
+            })
 
-    return master_tracks
+        # ---------------------------------
+        # COMPOSE DATA
+        # ---------------------------------
+        for fragment in compiled_fragments:
 
-def build_buckets(tracks):
-    buckets = {
-        "tracks": [],
+            for parent_key, payload in (
+                fragment.items()
+            ):
+                composed_data[parent_key].update(
+                    payload
+                )
+
+        master_data.append(composed_data)
+
+    return master_data
+
+# ----------------------------------------------
+#  COLLECTION DERIVATION
+# ----------------------------------------------
+def build_collections(tracks):
+    """
+    Build derived entity collections from canonical flattened tracks.
+
+    Input track shape:
+    {
+        "id": ...,
+        "name": ...,
+
+        "album_id": ...,
+        "album_name": ...,
+        "album_type": ...,
+
+        "artist_id": ...,
+        "artist_name": ...
+    }
+
+    Core idea:
+    - tracks are canonical rows
+    - collections are derived entity views
+    - deduplicate entities by relational ids
+    """
+
+    collections = {
         "albums": {},
         "eps": {},
         "artists": {}
     }
-    count = 0
-    for item in tracks:
-        # print(type(item))
-        count += 1
-        track = item.get("track", {})
-        album = item.get("album", {})
-        artist = item.get("artist", {})
 
-        # -------- TRACKS --------
-        buckets["tracks"].append(track)
+    for track in tracks:
 
-        # -------- ALBUMS / EPS --------
-        album_id = album.get("id")
-        album_type = album.get("type")  # <-- comes from Tidal ("ALBUM", "EP", etc)
+        # ---------------------------------
+        # ALBUMS / EPS
+        # ---------------------------------
+        album_id = track.get("album_id")
 
-        if album_id and album_id not in buckets["albums"] and album_id not in buckets["eps"]:
+        if album_id:
 
+            album_obj = {
+                "id": album_id,
+                "name": track.get("album_name"),
+                "type": track.get("album_type")
+            }
+
+            album_type = track.get("album_type")
+
+            # -------- EPS --------
             if album_type == "EP":
-                buckets["eps"][album_id] = album
+
+                if album_id not in collections["eps"]:
+
+                    collections["eps"][album_id] = album_obj
+
+            # -------- ALBUMS --------
             else:
-                buckets["albums"][album_id] = album
 
-        # -------- ARTISTS --------
-        artist_id = artist.get("id")
-        if artist_id and artist_id not in buckets["artists"]:
-            buckets["artists"][artist_id] = artist
+                if album_id not in collections["albums"]:
 
-    # convert dicts → lists
-    buckets["albums"] = list(buckets["albums"].values())
-    buckets["eps"] = list(buckets["eps"].values())
-    buckets["artists"] = list(buckets["artists"].values())
-    return buckets
+                    collections["albums"][album_id] = album_obj
+
+        # ---------------------------------
+        # ARTISTS
+        # ---------------------------------
+        artist_id = track.get("artist_id")
+
+        if artist_id:
+
+            artist_obj = {
+                "id": artist_id,
+                "name": track.get("artist_name")
+            }
+
+            if artist_id not in collections["artists"]:
+
+                collections["artists"][artist_id] = artist_obj
+
+    # ---------------------------------
+    # MAPS → LISTS
+    # ---------------------------------
+    return {
+        "albums": list(collections["albums"].values()),
+        "eps": list(collections["eps"].values()),
+        "artists": list(collections["artists"].values())
+    }
 
 # ----------------------------------------------
 #  VALUE NORMALIZATION
@@ -784,34 +991,207 @@ def track_to_dict(track):
     }
 
 
+# tracks = get_tracks(
+#     ["Radiohead"],
+#     top=True,
+#     limit=True,
+#     collections=True
+# )
+
+# # track_data = tracks["tracks"]
+
+# print("\n======== TRACK FIELD INSPECTION ========\n")
+
+# count = 0
+
+# for track in tracks.keys():
+#     print(f"{track}")
+
+
+# ----------------------------------------------
+#  RELATIONAL INTEGRITY TEST
+# ----------------------------------------------
+
+# tracks = get_tracks(
+#     ["Radiohead"],
+#     top=True,
+#     limit=True,
+#     collections=True
+# )
+
+# track_data = tracks["tracks"]
+# album_data = tracks["albums"]
+# artist_data = tracks["artists"]
+
+# # ----------------------------------------------
+# #  VERIFY TRACK STRUCTURE
+# # ----------------------------------------------
+
+# print("\n======== TRACKS ========\n")
+
+# saved_album_ids = set()
+# saved_artist_ids = set()
+
+# count = 0
+
+# for track in track_data[:2]:
+
+#     count += 1
+
+#     print(f"\n--- TRACK {count} ---")
+
+#     # full flattened track
+#     # for k, v in track.items():
+
+#         # print(f"{k}: {v}")
+
+#     # -------- RELATIONSHIPS --------
+#     album_id = track.get("album_id")
+#     artist_id = track.get("artist_id")
+
+#     # print("\nRELATIONSHIPS")
+#     # print(f"album_id: {album_id}")
+#     # print(f"artist_id: {artist_id}")
+
+#     # preserve ids
+#     if album_id:
+
+#         saved_album_ids.add(album_id)
+
+#     if artist_id:
+
+#         saved_artist_ids.add(artist_id)
+
+# # # ----------------------------------------------
+# # #  VERIFY DERIVED ALBUMS
+# # # ----------------------------------------------
+
+# print("\n=== ALBUMS ===\n")
+
+# derived_album_ids = set()
+
+# for album in album_data:
+
+#     print(album)
+
+#     album_id = album.get("id")
+
+#     if album_id:
+
+#         derived_album_ids.add(album_id)
+
+# # ----------------------------------------------
+# #  VERIFY DERIVED ARTISTS
+# # ----------------------------------------------
+
+# print("\n=== ARTISTS ===\n")
+
+# derived_artist_ids = set()
+
+# for artist in artist_data:
+
+#     print(artist)
+
+#     artist_id = artist.get("id")
+
+#     if artist_id:
+
+#         derived_artist_ids.add(artist_id)
+
+# ----------------------------------------------
+#  RELATIONAL VALIDATION
+# ----------------------------------------------
+
+# print("\n======== VALIDATION ========\n")
+
+# print("TRACK → ALBUM RELATIONSHIP CHECK")
+# print(saved_album_ids.issubset(derived_album_ids))
+
+# print("\nTRACK → ARTIST RELATIONSHIP CHECK")
+# print(saved_artist_ids.issubset(derived_artist_ids))
+
+# print("\nMissing Albums:")
+# print(saved_album_ids - derived_album_ids)
+
+# print("\nMissing Artists:")
+# print(saved_artist_ids - derived_artist_ids)
+
+# tracks = get_tracks(
+#     ["Radiohead"],
+#     top=True,
+#     limit=True,
+#     collections=True
+# )
+
+# album_data = tracks["albums"]
+# ep_data = tracks["eps"]
+
+# # ----------------------------------------------
+# #  VERIFY ALBUM COLLECTION
+# # ----------------------------------------------
+
+# print("\n======== ALBUM COLLECTION ========\n")
+
+# count = 0
+
+# for album in album_data:
+
+#     count += 1
+
+#     print(f"\n--- ALBUM {count} ---")
+
+#     for key, value in album.items():
+
+#         print(f"{key}: {value}")
+
+# # ----------------------------------------------
+# #  VERIFY EP COLLECTION
+# # ----------------------------------------------
+
+# print("\n======== EP COLLECTION ========\n")
+
+# count = 0
+
+# for ep in ep_data:
+
+#     count += 1
+
+#     print(f"\n--- EP {count} ---")
+
+#     for key, value in ep.items():
+
+#         print(f"{key}: {value}")
+
+
 tracks = get_tracks(
     ["Radiohead"],
     top=True,
     limit=True,
-    buckets=True
+    collections=False
 )
 
-bucket_data = tracks["buckets"]
+track_data = tracks["tracks"]
 
-# -------- VERIFY TRACK STRUCTURE --------
-for track in bucket_data["tracks"][:5]:
+print("\n======== RELATIONAL ROWS ========\n")
 
-    print(f"TYPE: {type(track)}")
-    print(f"KEYS: {track.keys()}")
+count = 0
 
-    print(
-        f"{track.get('name')} | "
-        f"track #: {track.get('track_num')}"
-    )
+for row in track_data[:2]:
 
-    # print(track)
+    count += 1
 
-# tracks = get_top_tracks("Radiohead")
-# count = []
-# t = tracks.get("data")
-# for track in t:
-#     print(
-#         f"{track['album'].get('name')} is album and "
-#         f"{track['track'].get('name')} is song, "
-#         f"{track['track'].get('track_num')}"
-#     )
+    print(f"\n--- ROW {count} ---\n")
+
+    for parent_key, entity_data in row.items():
+
+        print(f"{parent_key.upper()}")
+
+        for child_key, child_value in (
+            entity_data.items()
+        ):
+            print(
+                f"    {child_key}: "
+                f"{child_value}"
+            )
+
+        print()
