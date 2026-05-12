@@ -10,6 +10,8 @@
 import tidalapi
 import json
 import os
+import re
+import time
 import requests
 import asyncio
 import datetime
@@ -286,7 +288,7 @@ async def get_top_tracks(
 
 # -------- TRACK DATASET PIPELINE --------
 # fetch → flatten → sort → derive collections → attach assets
-def get_tracks(
+async def get_tracks(
     artists,
     top,
     limit,
@@ -322,6 +324,9 @@ def get_tracks(
     - albums / eps / artists are derived collections
     - assets support frontend rendering
     """
+
+# fetch → flatten → sort → derive collections
+# → attach assets
     session = get_session()
 
     raw_tracks = []
@@ -331,8 +336,9 @@ def get_tracks(
 
     if isinstance(artists, str):
         artists = [artists]
-
-    # -------- FETCH --------
+        
+    fetch_start = time.perf_counter()
+    # -------------FETCH-------------------
     for artist in artists:
 
         results = session.search(
@@ -341,7 +347,7 @@ def get_tracks(
             limit=1
         )
 
-        artist_results = results.get("artists", [])
+        artist_results = results.get("artists",[])
 
         if not artist_results:
             continue
@@ -351,29 +357,29 @@ def get_tracks(
         albums = []
 
         if mode == "albums":
-
             albums.extend(artist_obj._get_albums())
 
         elif mode == "eps":
-
             albums.extend(artist_obj.get_ep_singles())
 
         else:
-
             albums.extend(artist_obj._get_albums())
-            albums.extend(artist_obj.get_ep_singles())
+            # albums.extend(artist_obj.get_ep_singles())
+
 
         for album in albums:
 
             alb_images.append(album.image(160))
             art_images.append(artist_obj.image(160))
-
             raw_tracks.extend(album.tracks())
 
-    # -------- FLATTEN --------
-    tracks = flatten_track(raw_tracks)
 
-    # -------- SORTING --------
+    fetch_end = time.perf_counter()
+    print(fetch_end - fetch_start)
+    # -------------FLATTEN-------------------
+    entities = flatten_track(raw_tracks)
+
+    # -------------SORTING-------------------
     if top:
 
         sort_fields = [
@@ -387,37 +393,44 @@ def get_tracks(
             ("track.track_num", "asc")
         ]
 
-    tracks = sort_items(
-        tracks,
+    entities = sort_items(
+        entities,
         sort_fields
     )
 
-    # -------- DERIVED COLLECTIONS --------
+    # ----------------------------------------------
+    # COLLECTIONS
+    # ----------------------------------------------
+
     if collections:
 
-        derived = build_collections(tracks)
+        derived = build_collections(entities)
 
         return {
-            "tracks": tracks,
+            "tracks": derived["tracks"],
             "albums": derived["albums"],
             "eps": derived["eps"],
+            "live": derived["live"],
+            "compilations": derived["compilations"],
             "artists": derived["artists"],
-
-            "assets": {
-                "album_images": alb_images,
-                "artist_images": art_images
-            }
+            # "assets": {
+            #     "album_images": alb_images,
+            #     "artist_images": art_images
+            # }
         }
 
-    # -------- DEFAULT RETURN --------
+    # ----------------------------------------------
+    # RAW ENTITY RETURN
+    # ----------------------------------------------
     return {
-        "tracks": tracks,
+        "entities": entities,
 
-        "assets": {
-            "album_images": alb_images,
-            "artist_images": art_images
-        }
+        # "assets": {
+        #     "album_images": alb_images,
+        #     "artist_images": art_images
+        # }
     }
+
 # ----------------------------------------------
 #  TRACK FETCH (ALBUM-LEVEL)
 # ----------------------------------------------
@@ -502,42 +515,54 @@ async def get_favorites(
 ):
     session = get_session()
 
-    favorites = session.user.favorites.tracks(limit=600)
+    favorites = session.user.favorites.tracks(
+        limit=8000
+    )
 
     # filtering unchanged...
 
     # -------- FLATTEN --------
-    tracks = flatten_track(favorites)
+    entities = flatten_track(favorites)
 
     # -------- SORTING --------
     sort_fields = [
         ("track.popularity", "desc")
     ]
 
-    tracks = sort_items(
-        tracks,
+    entities = sort_items(
+        entities,
         sort_fields
     )
 
     # -------- LIMIT --------
     if top and isinstance(top, int):
-        tracks = limit_results(tracks, top)
+
+        entities = limit_results(
+            entities,
+            top
+        )
 
     # -------- DERIVED COLLECTIONS --------
     if collections:
 
-        derived = build_collections(tracks)
+        derived = build_collections(
+            entities
+        )
 
         return {
-            "tracks": tracks,
+            "tracks": derived["tracks"],
             "albums": derived["albums"],
             "eps": derived["eps"],
-            "artists": derived["artists"]
+            "live": derived["live"],
+            "compilations":
+                derived["compilations"],
+            "artists":
+                derived["artists"]
         }
 
     # -------- DEFAULT RETURN --------
     return {
-        "tracks": tracks
+        "entities": entities
     }
 
 
@@ -845,12 +870,9 @@ def flatten_track(data):
         # ---------------------------------
         for fragment in compiled_fragments:
 
-            for parent_key, payload in (
-                fragment.items()
-            ):
-                composed_data[parent_key].update(
-                    payload
-                )
+            for parent_key, payload in (fragment.items()):
+
+                composed_data[parent_key].update(payload)
 
         master_data.append(composed_data)
 
@@ -859,89 +881,137 @@ def flatten_track(data):
 # ----------------------------------------------
 #  COLLECTION DERIVATION
 # ----------------------------------------------
-def build_collections(tracks):
+def build_collections(entities):
     """
-    Build derived entity collections from canonical flattened tracks.
+    Build derived entity collections from
+    normalized relational rows.
 
-    Input track shape:
+    Input row shape:
     {
-        "id": ...,
-        "name": ...,
-
-        "album_id": ...,
-        "album_name": ...,
-        "album_type": ...,
-
-        "artist_id": ...,
-        "artist_name": ...
+        "track": {...},
+        "album": {...},
+        "artist": {...}
     }
 
     Core idea:
-    - tracks are canonical rows
+    - entities are canonical relational rows
     - collections are derived entity views
-    - deduplicate entities by relational ids
+    - deduplicate entities by ids
     """
 
     collections = {
+        "tracks": {},
         "albums": {},
         "eps": {},
+        "live": {},
+        "compilations": {},
         "artists": {}
     }
 
-    for track in tracks:
+    for row in entities:
+
+        track = row.get("track", {})
+        album = row.get("album", {})
+        artist = row.get("artist", {})
 
         # ---------------------------------
-        # ALBUMS / EPS
+        # TRACKS
         # ---------------------------------
-        album_id = track.get("album_id")
+        track_id = track.get("id")
+
+        if track_id:
+
+            if track_id not in collections["tracks"]:
+
+                collections["tracks"][track_id] = track
+
+        # ---------------------------------
+        # ALBUMS / EPS / LIVE / COMPILATIONS
+        # ---------------------------------
+        album_id = album.get("id")
 
         if album_id:
 
-            album_obj = {
-                "id": album_id,
-                "name": track.get("album_name"),
-                "type": track.get("album_type")
-            }
+            album_type = album.get("type")
 
-            album_type = track.get("album_type")
+            album_name = (
+                album.get("name", "")
+                .lower()
+            )
 
-            # -------- EPS --------
-            if album_type == "EP":
+            # -------- LIVE --------
+            if re.search(
+                r"\([^)]*live[^)]*\)",
+                album_name
+            ):
+
+                if album_id not in collections["live"]:
+
+                    collections["live"][album_id] = album
+
+            # -------- COMPILATIONS --------
+            elif (
+                "greatest hits" in album_name or
+                "best of" in album_name or
+                "collection" in album_name or
+                "complete" in album_name
+            ):
+
+                if album_id not in collections["compilations"]:
+
+                    collections["compilations"][album_id] = album
+
+            # -------- EPS / SINGLES --------
+            elif album_type in ["EP", "SINGLE"]:
 
                 if album_id not in collections["eps"]:
 
-                    collections["eps"][album_id] = album_obj
+                    collections["eps"][album_id] = album
 
             # -------- ALBUMS --------
             else:
 
                 if album_id not in collections["albums"]:
 
-                    collections["albums"][album_id] = album_obj
-
+                    collections["albums"][album_id] = album
         # ---------------------------------
         # ARTISTS
         # ---------------------------------
-        artist_id = track.get("artist_id")
+        artist_id = artist.get("id")
 
         if artist_id:
 
-            artist_obj = {
-                "id": artist_id,
-                "name": track.get("artist_name")
-            }
-
             if artist_id not in collections["artists"]:
 
-                collections["artists"][artist_id] = artist_obj
+                collections["artists"][artist_id] = artist
 
     # ---------------------------------
     # MAPS → LISTS
     # ---------------------------------
     return {
-        "albums": list(collections["albums"].values()),
-        "eps": list(collections["eps"].values()),
-        "artists": list(collections["artists"].values())
+        "tracks": list(
+            collections["tracks"].values()
+        ),
+
+        "albums": list(
+            collections["albums"].values()
+        ),
+
+        "eps": list(
+            collections["eps"].values()
+        ),
+
+        "live": list(
+            collections["live"].values()
+        ),
+
+        "compilations": list(
+            collections["compilations"].values()
+        ),
+
+        "artists": list(
+            collections["artists"].values()
+        )
     }
 
 # ----------------------------------------------
@@ -1023,108 +1093,44 @@ def track_to_dict(track):
 # album_data = tracks["albums"]
 # artist_data = tracks["artists"]
 
-# # ----------------------------------------------
-# #  VERIFY TRACK STRUCTURE
-# # ----------------------------------------------
-
-# print("\n======== TRACKS ========\n")
-
-# saved_album_ids = set()
-# saved_artist_ids = set()
-
-# count = 0
-
-# for track in track_data[:2]:
-
-#     count += 1
-
-#     print(f"\n--- TRACK {count} ---")
-
-#     # full flattened track
-#     # for k, v in track.items():
-
-#         # print(f"{k}: {v}")
-
-#     # -------- RELATIONSHIPS --------
-#     album_id = track.get("album_id")
-#     artist_id = track.get("artist_id")
-
-#     # print("\nRELATIONSHIPS")
-#     # print(f"album_id: {album_id}")
-#     # print(f"artist_id: {artist_id}")
-
-#     # preserve ids
-#     if album_id:
-
-#         saved_album_ids.add(album_id)
-
-#     if artist_id:
-
-#         saved_artist_ids.add(artist_id)
-
-# # # ----------------------------------------------
-# # #  VERIFY DERIVED ALBUMS
-# # # ----------------------------------------------
-
-# print("\n=== ALBUMS ===\n")
-
-# derived_album_ids = set()
-
-# for album in album_data:
-
-#     print(album)
-
-#     album_id = album.get("id")
-
-#     if album_id:
-
-#         derived_album_ids.add(album_id)
-
-# # ----------------------------------------------
-# #  VERIFY DERIVED ARTISTS
-# # ----------------------------------------------
-
-# print("\n=== ARTISTS ===\n")
-
-# derived_artist_ids = set()
-
-# for artist in artist_data:
-
-#     print(artist)
-
-#     artist_id = artist.get("id")
-
-#     if artist_id:
-
-#         derived_artist_ids.add(artist_id)
-
 # ----------------------------------------------
-#  RELATIONAL VALIDATION
+# TEST: RAW ENTITY STRUCTURE
+# collections=False
 # ----------------------------------------------
-
-# print("\n======== VALIDATION ========\n")
-
-# print("TRACK → ALBUM RELATIONSHIP CHECK")
-# print(saved_album_ids.issubset(derived_album_ids))
-
-# print("\nTRACK → ARTIST RELATIONSHIP CHECK")
-# print(saved_artist_ids.issubset(derived_artist_ids))
-
-# print("\nMissing Albums:")
-# print(saved_album_ids - derived_album_ids)
-
-# print("\nMissing Artists:")
-# print(saved_artist_ids - derived_artist_ids)
-
 # tracks = get_tracks(
 #     ["Radiohead"],
 #     top=True,
 #     limit=True,
-#     collections=True
+#     collections=False
 # )
 
-# album_data = tracks["albums"]
-# ep_data = tracks["eps"]
+# entity_data = tracks["entities"]
+
+# print("\n======== RELATIONAL ROWS ========\n")
+
+# count = 0
+
+# for row in entity_data[:2]:
+
+#     count += 1
+
+#     print(f"\n--- ROW {count} ---\n")
+
+#     for parent_key, entity_data in (
+#         row.items()
+#     ):
+
+#         print(f"{parent_key.upper()}")
+
+#         for child_key, child_value in (
+#             entity_data.items()
+#         ):
+#             print(
+#                 f"    {child_key}: "
+#                 f"{child_value}"
+#             )
+
+#         print()
 
 # # ----------------------------------------------
 # #  VERIFY ALBUM COLLECTION
@@ -1162,36 +1168,83 @@ def track_to_dict(track):
 
 #         print(f"{key}: {value}")
 
-
+# ----------------------------------------------
+# TEST: TRACK → ALBUM RELATIONSHIP INTEGRITY
+# verify all track album_ids map to album entities
+# ----------------------------------------------
 tracks = get_tracks(
     ["Radiohead"],
     top=True,
     limit=True,
-    collections=False
+    collections=True
 )
 
-track_data = tracks["tracks"]
+# entities = tracks["entities"]
 
-print("\n======== RELATIONAL ROWS ========\n")
+# album_ids = set()
 
-count = 0
+# # collect album ids from tracks
+# for row in entities:
 
-for row in track_data[:2]:
+#     track = row.get("track", {})
 
-    count += 1
+#     album_id = track.get("album_id")
 
-    print(f"\n--- ROW {count} ---\n")
+#     if album_id:
+#         album_ids.add(album_id)
 
-    for parent_key, entity_data in row.items():
+# # collect actual album entities
+# albums = {}
 
-        print(f"{parent_key.upper()}")
+# for row in entities:
 
-        for child_key, child_value in (
-            entity_data.items()
-        ):
-            print(
-                f"    {child_key}: "
-                f"{child_value}"
-            )
+#     album = row.get("album", {})
 
-        print()
+#     album_id = album.get("id")
+
+#     if album_id:
+#         albums[album_id] = album
+
+# print("track album_ids:", len(album_ids))
+# print("album entities:", len(albums))
+
+# missing = album_ids - set(albums.keys())
+
+# print("\nmissing album ids:")
+# print(missing)
+
+# ----------------------------------------------
+# TEST: ALL ALBUM CLASSIFICATIONS
+# collections=True
+# ----------------------------------------------
+# tracks = get_tracks(
+#     ["Radiohead"],
+#     top=True,
+#     limit=True,
+#     collections=True
+# )
+
+# print("tracks:", len(tracks["tracks"]))
+# print("albums:", len(tracks["albums"]))
+# print("eps:", len(tracks["eps"]))
+# print("artists:", len(tracks["artists"]))
+
+# print("\nAlbums\n")
+
+# for album in tracks["albums"]:
+#     print(album.get("name"))
+
+# print("\nEPs\n")
+
+# for album in tracks["eps"]:
+#     print(album.get("name"))
+
+# print("\nLive\n")
+
+# for album in tracks["live"]:
+#     print(album.get("name"))
+
+# print("\nCompilations\n")
+
+# for album in tracks["compilations"]:
+#     print(album.get("name"))

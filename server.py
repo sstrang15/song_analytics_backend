@@ -145,7 +145,7 @@ async def favorites_handler(params):
     print(f"artist: {artist}, album: {album}, top: {top}")
     start = time.perf_counter()
     try:
-        tracks = await get_favorites(artist, album)
+        tracks = await get_favorites(artist, album,collections=True)
     except Exception as e:
         print("Error in get_tracks:", e)
         tracks = []
@@ -155,8 +155,9 @@ async def favorites_handler(params):
     # print(f"tracks are {tracks}")
     return {
         "id": "getfavorites",
-        "data": tracks["data"] if isinstance(tracks, dict) else tracks
+        "data": tracks
     }
+
 
 # This is for getting tracks and track information
 async def track_handler(params): 
@@ -200,9 +201,7 @@ async def track_handler(params):
     # print(f"tracks are {tracks}")
     return {
         "id": "gettracks",
-        "data": tracks["data"] if isinstance(tracks, dict) else tracks,
-    #     "album_images": tracks["album_images"],
-    #     "artist_images": tracks["artist_images"]
+        "data": tracks
     }
 
 # This is for getting albums and album information
@@ -276,7 +275,7 @@ async def send_response(send, status, data):
     await send({"type": "http.response.body", "body": body})
     print("Data sent ...\n")
 
-    print(body)
+    # print(body)
     # print()
     # print(f"The text is ... ${body}")
 
